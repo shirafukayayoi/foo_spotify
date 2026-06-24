@@ -29,8 +29,10 @@ class SpotifyApiClient
 {
 public:
     SpotifyResult play(const std::string &spotifyUri, double positionSeconds);
+    SpotifyResult play(const std::string &spotifyUri, double positionSeconds, bool allowMuteOnSync);
     SpotifyResult playVirtualTrack(const std::string &spotifyTrackUri, double positionSeconds, int volumePercent);
     SpotifyResult playAlbum(const std::string &spotifyAlbumUri, int zeroBasedOffset, double positionSeconds);
+    SpotifyResult playAlbum(const std::string &spotifyAlbumUri, int zeroBasedOffset, double positionSeconds, bool allowMuteOnSync);
     SpotifyResult pause();
     SpotifyResult seek(double positionSeconds);
     SpotifyResult setVolume(int volumePercent);

@@ -84,9 +84,11 @@ public:
         m_lastPlayedPath = metadata.path;
         m_lastPlayedLength = metadata.lengthSeconds;
         m_lastPlaybackNearEnd = false;
+        const bool previousWasSpotifyVirtual = m_lastTrackWasSpotifyVirtual;
+        m_lastTrackWasSpotifyVirtual = isSpotifyVirtualTrack(metadata.path);
         findPlayingPlaylistItem(m_lastPlayedPlaylist, m_lastPlayedItem);
 
-        if (isSpotifyVirtualTrack(metadata.path))
+        if (m_lastTrackWasSpotifyVirtual)
         {
             m_lastSpotifyUri = metadata.path;
             return;
@@ -102,10 +104,11 @@ public:
 
         m_lastSpotifyUri = *uri;
         const int zeroBasedAlbumOffset = metadata.trackNumber > 0 ? metadata.trackNumber - 1 : 0;
+        const bool allowMuteOnSync = !previousWasSpotifyVirtual;
         if (uri->rfind("spotify:album:", 0) == 0)
-            m_client.playAlbum(*uri, zeroBasedAlbumOffset, 0.0);
+            m_client.playAlbum(*uri, zeroBasedAlbumOffset, 0.0, allowMuteOnSync);
         else
-            m_client.play(*uri, 0.0);
+            m_client.play(*uri, 0.0, allowMuteOnSync);
     }
 
     void on_playback_stop(play_control::t_stop_reason reason) override
@@ -213,6 +216,7 @@ private:
     std::string m_lastPlayedPath;
     double m_lastPlayedLength = 0.0;
     bool m_lastPlaybackNearEnd = false;
+    bool m_lastTrackWasSpotifyVirtual = false;
     std::chrono::steady_clock::time_point m_lastSeekCheck{};
 };
 

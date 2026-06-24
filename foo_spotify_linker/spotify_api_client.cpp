@@ -402,13 +402,18 @@ std::optional<std::string> playlistIdFromUri(const std::string &spotifyPlaylistU
 
 SpotifyResult SpotifyApiClient::play(const std::string &spotifyUri, double positionSeconds)
 {
+    return play(spotifyUri, positionSeconds, true);
+}
+
+SpotifyResult SpotifyApiClient::play(const std::string &spotifyUri, double positionSeconds, bool allowMuteOnSync)
+{
     const int posMs = static_cast<int>(positionSeconds * 1000.0);
     std::wstring url = playbackUrl(L"/play");
     pfc::string8 device = g_cfg_default_device_id.get();
     if (!device.is_empty())
         url += L"?device_id=" + std::wstring(device.c_str(), device.c_str() + std::strlen(device.c_str()));
 
-    if (g_cfg_mute_on_sync.get())
+    if (allowMuteOnSync && g_cfg_mute_on_sync.get())
         setVolume(0);
 
     std::string body;
@@ -447,6 +452,11 @@ SpotifyResult SpotifyApiClient::playVirtualTrack(const std::string &spotifyTrack
 
 SpotifyResult SpotifyApiClient::playAlbum(const std::string &spotifyAlbumUri, int zeroBasedOffset, double positionSeconds)
 {
+    return playAlbum(spotifyAlbumUri, zeroBasedOffset, positionSeconds, true);
+}
+
+SpotifyResult SpotifyApiClient::playAlbum(const std::string &spotifyAlbumUri, int zeroBasedOffset, double positionSeconds, bool allowMuteOnSync)
+{
     if (zeroBasedOffset < 0)
         zeroBasedOffset = 0;
     const int posMs = static_cast<int>(positionSeconds * 1000.0);
@@ -455,7 +465,7 @@ SpotifyResult SpotifyApiClient::playAlbum(const std::string &spotifyAlbumUri, in
     if (!device.is_empty())
         url += L"?device_id=" + std::wstring(device.c_str(), device.c_str() + std::strlen(device.c_str()));
 
-    if (g_cfg_mute_on_sync.get())
+    if (allowMuteOnSync && g_cfg_mute_on_sync.get())
         setVolume(0);
 
     const std::string body = "{\"context_uri\":\"" + spotifyAlbumUri + "\",\"offset\":{\"position\":" +

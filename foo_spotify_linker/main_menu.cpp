@@ -87,6 +87,20 @@ bool isSpotifyVirtualPath(const std::string &path)
     return path.rfind("spotify:track:", 0) == 0;
 }
 
+bool isLocalFilesystemPath(const std::string &path)
+{
+    if (path.empty() || isSpotifyVirtualPath(path))
+        return false;
+    try
+    {
+        return !filesystem::g_is_remote_or_unrecognized(path.c_str());
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
 std::string trimLink(std::string input)
 {
     input.erase(std::remove_if(input.begin(), input.end(), [](unsigned char ch) { return ch == '\r' || ch == '\n' || ch == '\t'; }), input.end());
@@ -259,7 +273,7 @@ void runLibraryAutoLink(std::vector<TrackMetadata> tracks)
         SpotifyApiClient client;
         for (const auto &metadata : tracks)
         {
-            if (metadata.title.empty() || metadata.artist.empty() || isSpotifyVirtualPath(metadata.path))
+            if (metadata.title.empty() || metadata.artist.empty() || !isLocalFilesystemPath(metadata.path))
             {
                 ++stats.skipped;
                 continue;
