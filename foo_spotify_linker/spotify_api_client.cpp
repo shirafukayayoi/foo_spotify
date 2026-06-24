@@ -121,6 +121,201 @@ std::optional<std::string> jsonStringValueAfter(const std::string &json, const s
     return json.substr(pos + 1, end - pos - 1);
 }
 
+std::optional<std::string> jsonStringValueInRange(const std::string &json, const std::string &key, size_t begin, size_t end)
+{
+    const std::string marker = "\"" + key + "\"";
+    size_t pos = json.find(marker, begin);
+    if (pos == std::string::npos || pos >= end)
+        return std::nullopt;
+    pos = json.find(':', pos + marker.size());
+    if (pos == std::string::npos || pos >= end)
+        return std::nullopt;
+    pos = json.find('"', pos + 1);
+    if (pos == std::string::npos || pos >= end)
+        return std::nullopt;
+
+    std::string out;
+    bool escape = false;
+    for (++pos; pos < end; ++pos)
+    {
+        const char ch = json[pos];
+        if (escape)
+        {
+            out.push_back(ch);
+            escape = false;
+            continue;
+        }
+        if (ch == '\\')
+        {
+            escape = true;
+            continue;
+        }
+        if (ch == '"')
+            return out;
+        out.push_back(ch);
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> jsonDecodeQuotedRange(const std::string &json, size_t begin, size_t end)
+{
+    if (begin >= end || end > json.size() || json[begin] != '"')
+        return std::nullopt;
+
+    std::string out;
+    bool escape = false;
+    for (size_t pos = begin + 1; pos < end; ++pos)
+    {
+        const char ch = json[pos];
+        if (escape)
+        {
+            out.push_back(ch);
+            escape = false;
+            continue;
+        }
+        if (ch == '\\')
+        {
+            escape = true;
+            continue;
+        }
+        if (ch == '"')
+            return out;
+        out.push_back(ch);
+    }
+    return std::nullopt;
+}
+
+size_t jsonValueEnd(const std::string &json, size_t valueBegin)
+{
+    if (valueBegin >= json.size())
+        return std::string::npos;
+
+    const char opener = json[valueBegin];
+    const char closer = opener == '{' ? '}' : (opener == '[' ? ']' : '\0');
+    if (closer == '\0')
+        return std::string::npos;
+
+    int depth = 0;
+    bool inString = false;
+    bool escape = false;
+    for (size_t pos = valueBegin; pos < json.size(); ++pos)
+    {
+        const char ch = json[pos];
+        if (escape)
+        {
+            escape = false;
+            continue;
+        }
+        if (inString)
+        {
+            if (ch == '\\')
+                escape = true;
+            else if (ch == '"')
+                inString = false;
+            continue;
+        }
+        if (ch == '"')
+        {
+            inString = true;
+            continue;
+        }
+        if (ch == opener)
+            ++depth;
+        else if (ch == closer && --depth == 0)
+            return pos + 1;
+    }
+    return std::string::npos;
+}
+
+std::optional<std::pair<size_t, size_t>> jsonTopLevelValueRange(const std::string &json, const std::string &key)
+{
+    const std::string marker = "\"" + key + "\"";
+    int depth = 0;
+    bool inString = false;
+    bool escape = false;
+    for (size_t pos = 0; pos < json.size(); ++pos)
+    {
+        const char ch = json[pos];
+        if (escape)
+        {
+            escape = false;
+            continue;
+        }
+        if (inString)
+        {
+            if (ch == '\\')
+                escape = true;
+            else if (ch == '"')
+                inString = false;
+            continue;
+        }
+        if (ch == '"')
+        {
+            if (depth == 1 && json.compare(pos, marker.size(), marker) == 0)
+            {
+                size_t colon = json.find(':', pos + marker.size());
+                if (colon == std::string::npos)
+                    return std::nullopt;
+                size_t valueBegin = colon + 1;
+                while (valueBegin < json.size() && std::isspace(static_cast<unsigned char>(json[valueBegin])))
+                    ++valueBegin;
+                if (valueBegin >= json.size())
+                    return std::nullopt;
+                if (json[valueBegin] == '"')
+                {
+                    size_t valueEnd = valueBegin + 1;
+                    bool valueEscape = false;
+                    for (; valueEnd < json.size(); ++valueEnd)
+                    {
+                        if (valueEscape)
+                            valueEscape = false;
+                        else if (json[valueEnd] == '\\')
+                            valueEscape = true;
+                        else if (json[valueEnd] == '"')
+                            return std::make_pair(valueBegin, valueEnd + 1);
+                    }
+                    return std::nullopt;
+                }
+                const size_t valueEnd = jsonValueEnd(json, valueBegin);
+                if (valueEnd == std::string::npos)
+                    return std::nullopt;
+                return std::make_pair(valueBegin, valueEnd);
+            }
+            inString = true;
+            continue;
+        }
+        if (ch == '{' || ch == '[')
+            ++depth;
+        else if (ch == '}' || ch == ']')
+            --depth;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> jsonTopLevelStringValue(const std::string &json, const std::string &key)
+{
+    const auto range = jsonTopLevelValueRange(json, key);
+    if (!range || range->first >= json.size() || json[range->first] != '"')
+        return std::nullopt;
+    return jsonDecodeQuotedRange(json, range->first, range->second);
+}
+
+std::optional<std::string> spotifyTrackArtistName(const std::string &json)
+{
+    const auto range = jsonTopLevelValueRange(json, "artists");
+    if (!range)
+        return std::nullopt;
+    return jsonStringValueInRange(json, "name", range->first, range->second);
+}
+
+std::optional<std::string> spotifyTrackAlbumName(const std::string &json)
+{
+    const auto range = jsonTopLevelValueRange(json, "album");
+    if (!range)
+        return std::nullopt;
+    return jsonStringValueInRange(json, "name", range->first, range->second);
+}
+
 std::optional<int> jsonIntValueLocal(const std::string &json, const std::string &key)
 {
     const std::string marker = "\"" + key + "\"";
@@ -310,11 +505,11 @@ std::optional<SpotifyTrackInfo> SpotifyApiClient::getTrackInfo(const std::string
 
     SpotifyTrackInfo info;
     info.uri = spotifyTrackUri;
-    if (const auto title = jsonStringValueAfter(response->body, "", "name"))
+    if (const auto title = jsonTopLevelStringValue(response->body, "name"))
         info.title = *title;
-    if (const auto artist = jsonStringValueAfter(response->body, "\"artists\"", "name"))
+    if (const auto artist = spotifyTrackArtistName(response->body))
         info.artist = *artist;
-    if (const auto album = jsonStringValueAfter(response->body, "\"album\"", "name"))
+    if (const auto album = spotifyTrackAlbumName(response->body))
         info.album = *album;
     if (const auto duration = jsonIntValueLocal(response->body, "duration_ms"))
         info.durationMs = *duration;
