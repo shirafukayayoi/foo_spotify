@@ -31,6 +31,13 @@ bool isSpotifyManagedPlaylist(t_size playlist)
            std::strcmp(name.c_str(), "Spotify Track") == 0;
 }
 
+bool isSpotifyJamPlaylist(t_size playlist)
+{
+    pfc::string8 name;
+    return static_api_ptr_t<playlist_manager>()->playlist_get_name(playlist, name) &&
+           std::strcmp(name.c_str(), "Spotify Jam") == 0;
+}
+
 int foobarVolumeDbToPercent(float volumeDb)
 {
     if (volumeDb <= play_control::volume_mute)
@@ -104,7 +111,12 @@ public:
         if (reason == play_control::stop_reason_starting_another)
             return;
         if (reason == play_control::stop_reason_eof)
+        {
+            const bool refillJam = isSpotifyJamPlaylist(m_lastPlayedPlaylist);
             removeFinishedManagedPlaylistItem();
+            if (refillJam)
+                requestNextSpotifyQueueTrackInFoobar();
+        }
         m_client.pause();
         m_lastSpotifyUri.clear();
         m_lastPlayedPlaylist = SIZE_MAX;

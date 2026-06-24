@@ -247,7 +247,10 @@ public:
             for (const auto &uri : api.getQueueTrackUris())
             {
                 if (std::find(tracks.begin(), tracks.end(), uri) == tracks.end())
+                {
                     tracks.push_back(uri);
+                    break;
+                }
             }
             if (tracks.empty())
             {
@@ -255,7 +258,7 @@ public:
                 return;
             }
             addLocationsToNewPlaylist(tracks, "Spotify Jam", false);
-            popup_message::g_show(("Jam の現在再生と queue から " + std::to_string(tracks.size()) + " 曲を追加しました。新しく追加される曲は Follow Spotify playback を有効にすると追従します。").c_str(), "Spotify Linker");
+            popup_message::g_show(("Jam の現在再生と次の曲から " + std::to_string(tracks.size()) + " 曲を追加しました。以後は Follow Spotify playback で1曲ずつ補充します。").c_str(), "Spotify Linker");
             return;
         }
 

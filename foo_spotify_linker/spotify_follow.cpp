@@ -98,15 +98,14 @@ private:
     std::vector<std::string> m_uris;
 };
 
-std::vector<std::string> unseenQueueUris(const std::vector<std::string> &uris)
+std::vector<std::string> firstUnseenQueueUri(const std::vector<std::string> &uris)
 {
-    std::vector<std::string> out;
     for (const std::string &uri : uris)
     {
         if (g_seenQueueUris.insert(uri).second)
-            out.push_back(uri);
+            return {uri};
     }
-    return out;
+    return {};
 }
 } // namespace
 
@@ -131,6 +130,14 @@ void addSpotifyQueueTracksInFoobar(const std::vector<std::string> &spotifyTrackU
 {
     if (!spotifyTrackUris.empty())
         main_thread_callback_manager::get()->add_callback(new service_impl_t<AddSpotifyQueueItemsCallback>(spotifyTrackUris));
+}
+
+void requestNextSpotifyQueueTrackInFoobar()
+{
+    std::thread([] {
+        SpotifyApiClient client;
+        addSpotifyQueueTracksInFoobar(firstUnseenQueueUri(client.getQueueTrackUris()));
+    }).detach();
 }
 
 void startSpotifyFollowWorker()
@@ -163,7 +170,7 @@ void startSpotifyFollowWorker()
                     }
                 }
 
-                const auto queueUris = unseenQueueUris(client.getQueueTrackUris());
+                const auto queueUris = firstUnseenQueueUri(client.getQueueTrackUris());
                 addSpotifyQueueTracksInFoobar(queueUris);
             }
 
