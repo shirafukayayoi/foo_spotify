@@ -11,6 +11,20 @@ std::string getMeta(const file_info &info, const char *name)
     return value ? value : "";
 }
 
+int parseLeadingInt(const std::string &value, int fallback)
+{
+    int result = 0;
+    bool any = false;
+    for (char ch : value)
+    {
+        if (!std::isdigit(static_cast<unsigned char>(ch)))
+            break;
+        result = result * 10 + (ch - '0');
+        any = true;
+    }
+    return any ? result : fallback;
+}
+
 std::uint32_t fnv1a(const std::string &text, std::uint32_t seed)
 {
     std::uint32_t hash = seed;
@@ -50,6 +64,8 @@ TrackMetadata readTrackMetadata(const metadb_handle_ptr &track)
     metadata.album = getMeta(info, "ALBUM");
     metadata.albumArtist = getMeta(info, "ALBUM ARTIST");
     metadata.date = getMeta(info, "DATE");
+    metadata.trackNumber = parseLeadingInt(getMeta(info, "TRACKNUMBER"), 0);
+    metadata.discNumber = parseLeadingInt(getMeta(info, "DISCNUMBER"), 1);
     metadata.lengthSeconds = info.get_length();
     metadata.fileSize = static_cast<std::uint64_t>(track->get_filesize());
     return metadata;
@@ -76,6 +92,17 @@ std::string makeSearchQuery(const TrackMetadata &metadata)
         stream << "artist:\"" << metadata.artist << "\" ";
     if (!metadata.title.empty())
         stream << "track:\"" << metadata.title << "\" ";
+    if (!metadata.album.empty())
+        stream << "album:\"" << metadata.album << "\"";
+    return stream.str();
+}
+
+std::string makeAlbumSearchQuery(const TrackMetadata &metadata)
+{
+    std::ostringstream stream;
+    const std::string albumArtist = metadata.albumArtist.empty() ? metadata.artist : metadata.albumArtist;
+    if (!albumArtist.empty())
+        stream << "artist:\"" << albumArtist << "\" ";
     if (!metadata.album.empty())
         stream << "album:\"" << metadata.album << "\"";
     return stream.str();

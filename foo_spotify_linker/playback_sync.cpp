@@ -44,7 +44,11 @@ public:
         }
 
         m_lastSpotifyUri = *uri;
-        m_client.play(*uri, 0.0);
+        const int zeroBasedAlbumOffset = metadata.trackNumber > 0 ? metadata.trackNumber - 1 : 0;
+        if (uri->rfind("spotify:album:", 0) == 0)
+            m_client.playAlbum(*uri, zeroBasedAlbumOffset, 0.0);
+        else
+            m_client.play(*uri, 0.0);
     }
 
     void on_playback_stop(play_control::t_stop_reason reason) override

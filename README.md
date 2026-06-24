@@ -49,23 +49,28 @@ vcpkg install sqlite3 nlohmann-json curl openssl fmt
 - Redirect URI `http://127.0.0.1:8088/callback`
 - Spotify Web API による再生、pause、seek、音量制御
 - SQLite による `track_map` / `album_map` / `config` テーブル作成
-- 右クリックメニュー `Spotify Linker` からの Spotify track / album URI 手動登録、削除
+- 右クリックメニュー `Spotify Linker` からの Spotify track / album URI 手動登録、自動登録、削除
 - Spotify URL の正規化 (`https://open.spotify.com/intl-ja/track/...` などのロケール付き URL を含む)
+- アルバム単位マッピング時のトラック番号オフセット再生
 - 再生開始、停止、pause、seek イベントの検知
 - `.fb2k-component` パッケージ作成
 
 未実装です。
 
-- 自動検索
 - D&D 登録 UI
-## 手動マッピング
+
+## Spotify マッピング
 
 foobar2000 上でトラックを右クリックし、`Spotify Linker` メニューから登録します。
 
 - `Set Track URI...`: 選択トラック単位で Spotify track URI / URL を登録
+- `Auto Set Track URI`: 選択トラックのタグから Spotify track を検索して登録
 - `Remove Track URI`: 選択トラック単位の登録を削除
 - `Set Album URI...`: 選択トラックのアルバム単位で Spotify album URI / URL を登録
+- `Auto Set Album URI`: 選択トラックのアルバムタグから Spotify album を検索して登録
 - `Remove Album URI`: 選択トラックのアルバム単位の登録を削除
+
+アルバム単位で登録した場合は、foobar2000 側の `TRACKNUMBER` を使って Spotify アルバム内の同じ位置から再生します。たとえばローカルの 3 曲目を再生した場合、Spotify 側もアルバムの 3 曲目から再生します。
 
 対応 URL 例:
 
