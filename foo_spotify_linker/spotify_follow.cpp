@@ -33,6 +33,17 @@ bool findSpotifyUriInActivePlaylist(PlaylistManagerPtr &playlists, const std::st
     return false;
 }
 
+template <typename PlaylistManagerPtr>
+bool isActivePlaylistSpotifyJam(PlaylistManagerPtr &playlists)
+{
+    const t_size active = playlists->get_active_playlist();
+    if (active == SIZE_MAX)
+        return false;
+
+    pfc::string8 name;
+    return playlists->playlist_get_name(active, name) && std::strcmp(name.c_str(), "Spotify Jam") == 0;
+}
+
 class StartSpotifyTrackCallback : public main_thread_callback
 {
 public:
@@ -83,6 +94,9 @@ public:
             return;
 
         auto playlists = static_api_ptr_t<playlist_manager>();
+        if (!isActivePlaylistSpotifyJam(playlists))
+            return;
+
         t_size insertAt = playlists->activeplaylist_get_item_count();
         for (const std::string &uriText : m_uris)
         {
