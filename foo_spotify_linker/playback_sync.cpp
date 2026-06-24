@@ -82,6 +82,8 @@ public:
         m_lastPlayedPlaylist = SIZE_MAX;
         m_lastPlayedItem = SIZE_MAX;
         m_lastPlayedPath = metadata.path;
+        m_lastPlayedLength = metadata.lengthSeconds;
+        m_lastPlaybackNearEnd = false;
         findPlayingPlaylistItem(m_lastPlayedPlaylist, m_lastPlayedItem);
 
         if (isSpotifyVirtualTrack(metadata.path))
@@ -108,20 +110,24 @@ public:
 
     void on_playback_stop(play_control::t_stop_reason reason) override
     {
-        if (reason == play_control::stop_reason_starting_another)
-            return;
-        if (reason == play_control::stop_reason_eof)
+        const bool shouldRemove = reason == play_control::stop_reason_eof ||
+                                  (reason == play_control::stop_reason_starting_another && m_lastPlaybackNearEnd);
+        if (shouldRemove)
         {
             const bool refillJam = isSpotifyJamPlaylist(m_lastPlayedPlaylist);
             removeFinishedManagedPlaylistItem();
             if (refillJam)
                 requestNextSpotifyQueueTrackInFoobar();
         }
+        if (reason == play_control::stop_reason_starting_another)
+            return;
         m_client.pause();
         m_lastSpotifyUri.clear();
         m_lastPlayedPlaylist = SIZE_MAX;
         m_lastPlayedItem = SIZE_MAX;
         m_lastPlayedPath.clear();
+        m_lastPlayedLength = 0.0;
+        m_lastPlaybackNearEnd = false;
     }
 
     void on_playback_pause(bool state) override
@@ -132,6 +138,8 @@ public:
 
     void on_playback_time(double time) override
     {
+        if (m_lastPlayedLength > 0.0 && m_lastPlayedLength - time <= 1.5)
+            m_lastPlaybackNearEnd = true;
         if (m_lastSpotifyUri.empty())
             return;
         const int interval = static_cast<int>(g_cfg_polling_interval_ms.get());
@@ -203,6 +211,8 @@ private:
     t_size m_lastPlayedPlaylist = SIZE_MAX;
     t_size m_lastPlayedItem = SIZE_MAX;
     std::string m_lastPlayedPath;
+    double m_lastPlayedLength = 0.0;
+    bool m_lastPlaybackNearEnd = false;
     std::chrono::steady_clock::time_point m_lastSeekCheck{};
 };
 
