@@ -7,6 +7,7 @@ extern cfg_var_modern::cfg_string g_cfg_client_id;
 extern cfg_var_modern::cfg_string g_cfg_default_device_id;
 extern cfg_var_modern::cfg_int g_cfg_polling_interval_ms;
 extern cfg_var_modern::cfg_bool g_cfg_mute_on_sync;
+extern cfg_var_modern::cfg_bool g_cfg_follow_spotify_playback;
 extern cfg_var_modern::cfg_string g_cfg_access_token;
 extern cfg_var_modern::cfg_string g_cfg_refresh_token;
 extern cfg_var_modern::cfg_int g_cfg_token_expires_at;

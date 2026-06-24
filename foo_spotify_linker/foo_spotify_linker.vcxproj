@@ -87,6 +87,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>..\foobar2000\shared\shared-$(Platform).lib;winhttp.lib;bcrypt.lib;crypt32.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>/FORCE:MULTIPLE %(AdditionalOptions)</AdditionalOptions>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <DataExecutionPrevention></DataExecutionPrevention>
     </Link>
@@ -131,6 +132,7 @@
     <ClCompile Include="playback_sync.cpp" />
     <ClCompile Include="preferences.cpp" />
     <ClCompile Include="context_menu.cpp" />
+    <ClCompile Include="spotify_follow.cpp" />
     <ClCompile Include="spotify_input.cpp" />
     <ClCompile Include="third_party\sqlite\sqlite3.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -144,6 +146,7 @@
     <ClInclude Include="metadata.h" />
     <ClInclude Include="mapping_manager.h" />
     <ClInclude Include="spotify_api_client.h" />
+    <ClInclude Include="spotify_follow.h" />
     <ClInclude Include="auth_manager.h" />
     <ClInclude Include="http_client.h" />
     <ClInclude Include="third_party\sqlite\sqlite3.h" />

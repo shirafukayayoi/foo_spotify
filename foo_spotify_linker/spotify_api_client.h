@@ -17,6 +17,13 @@ struct SpotifyTrackInfo
     int durationMs = 0;
 };
 
+struct SpotifyPlaybackInfo
+{
+    std::string trackUri;
+    int progressMs = 0;
+    bool isPlaying = false;
+};
+
 class SpotifyApiClient
 {
 public:
@@ -29,5 +36,6 @@ public:
     std::optional<std::string> searchTrack(const std::string &query);
     std::optional<std::string> searchAlbum(const std::string &query);
     std::optional<SpotifyTrackInfo> getTrackInfo(const std::string &spotifyTrackUri);
+    std::optional<SpotifyPlaybackInfo> getCurrentPlayback();
 };
 } // namespace fsl

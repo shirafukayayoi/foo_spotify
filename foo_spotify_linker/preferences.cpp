@@ -49,6 +49,7 @@ public:
         const int requestedPolling = _wtoi(polling);
         g_cfg_polling_interval_ms = requestedPolling < 250 ? 250 : requestedPolling;
         g_cfg_mute_on_sync = (IsDlgButtonChecked(IDC_CHECK_MUTE_ON_SYNC) == BST_CHECKED);
+        g_cfg_follow_spotify_playback = (IsDlgButtonChecked(IDC_CHECK_FOLLOW_SPOTIFY) == BST_CHECKED);
         onChanged();
     }
 
@@ -59,6 +60,7 @@ public:
         SetDlgItemText(IDC_EDIT_DEVICE_ID, L"");
         SetDlgItemText(IDC_EDIT_POLLING_INTERVAL, L"1000");
         CheckDlgButton(IDC_CHECK_MUTE_ON_SYNC, BST_CHECKED);
+        CheckDlgButton(IDC_CHECK_FOLLOW_SPOTIFY, BST_UNCHECKED);
         onChanged();
     }
 
@@ -69,6 +71,7 @@ public:
     COMMAND_HANDLER_EX(IDC_EDIT_DEVICE_ID, EN_CHANGE, onAnyChange)
     COMMAND_HANDLER_EX(IDC_EDIT_POLLING_INTERVAL, EN_CHANGE, onAnyChange)
     COMMAND_HANDLER_EX(IDC_CHECK_MUTE_ON_SYNC, BN_CLICKED, onAnyChange)
+    COMMAND_HANDLER_EX(IDC_CHECK_FOLLOW_SPOTIFY, BN_CLICKED, onAnyChange)
     COMMAND_HANDLER_EX(IDC_BTN_BROWSE_DB, BN_CLICKED, onBrowseDb)
     COMMAND_HANDLER_EX(IDC_BTN_LOGIN, BN_CLICKED, onLogin)
     COMMAND_HANDLER_EX(IDC_BTN_CLEAR_TOKEN, BN_CLICKED, onClearToken)
@@ -85,6 +88,7 @@ private:
         _snwprintf_s(buf, _TRUNCATE, L"%d", static_cast<int>(g_cfg_polling_interval_ms.get()));
         SetDlgItemText(IDC_EDIT_POLLING_INTERVAL, buf);
         CheckDlgButton(IDC_CHECK_MUTE_ON_SYNC, g_cfg_mute_on_sync.get() ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(IDC_CHECK_FOLLOW_SPOTIFY, g_cfg_follow_spotify_playback.get() ? BST_CHECKED : BST_UNCHECKED);
 
         SetDlgItemText(IDC_STATIC_STATUS, statusText().c_str());
         return FALSE;
@@ -151,7 +155,9 @@ private:
             return true;
         if (_wtoi(polling) != static_cast<int>(g_cfg_polling_interval_ms.get()))
             return true;
-        return (IsDlgButtonChecked(IDC_CHECK_MUTE_ON_SYNC) == BST_CHECKED) != g_cfg_mute_on_sync.get();
+        if ((IsDlgButtonChecked(IDC_CHECK_MUTE_ON_SYNC) == BST_CHECKED) != g_cfg_mute_on_sync.get())
+            return true;
+        return (IsDlgButtonChecked(IDC_CHECK_FOLLOW_SPOTIFY) == BST_CHECKED) != g_cfg_follow_spotify_playback.get();
     }
 
     void onChanged()

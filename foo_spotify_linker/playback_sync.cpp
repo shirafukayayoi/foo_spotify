@@ -2,6 +2,7 @@
 #include "mapping_manager.h"
 #include "metadata.h"
 #include "settings.h"
+#include "spotify_follow.h"
 #include "spotify_api_client.h"
 
 namespace fsl
@@ -32,10 +33,12 @@ public:
         const std::string path = effectiveDbPath();
         if (MappingManager::instance().open(path))
             FB2K_console_formatter() << "foo_spotify_linker: DB を開きました: " << path.c_str();
+        startSpotifyFollowWorker();
     }
 
     void on_quit() override
     {
+        stopSpotifyFollowWorker();
         MappingManager::instance().close();
     }
 };

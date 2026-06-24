@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "spotify_follow.h"
 #include "spotify_api_client.h"
 
 #include <SDK/input_impl.h>
@@ -177,6 +178,11 @@ private:
     {
         if (m_uri.empty())
             return;
+        if (shouldSuppressVirtualSpotifyPlayback())
+        {
+            m_started = true;
+            return;
+        }
         SpotifyApiClient client;
         const SpotifyResult result = client.playVirtualTrack(m_uri, positionSeconds, foobarVolumePercent());
         if (!result.ok)

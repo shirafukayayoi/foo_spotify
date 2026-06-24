@@ -53,6 +53,7 @@ vcpkg install sqlite3 nlohmann-json curl openssl fmt
 - Spotify URL の正規化 (`https://open.spotify.com/intl-ja/track/...` などのロケール付き URL を含む)
 - アルバム単位マッピング時のトラック番号オフセット再生
 - `spotify:track:...` の仮想トラック再生
+- Spotify 現在再生を foobar2000 仮想トラックへ追従する実験機能
 - 再生開始、停止、pause、seek イベントの検知
 - `.fb2k-component` パッケージ作成
 
@@ -83,6 +84,8 @@ spotify:track:2VU59VkXEBNX4ZZf7SmGAy
 ```
 
 この方式では foobar2000 側も再生中になるため、Playback Statistics 系の再生時間加算対象にできます。ただし Spotify 音源を foobar2000 でデコードしているわけではなく、foobar2000 は無音 PCM を流し、Spotify Web API で再生、pause、seek、音量を同期します。仮想トラック再生時の Spotify 音量は foobar2000 の現在音量に合わせます。
+
+`Preferences > Tools > Spotify Linker` の `Follow Spotify playback in foobar2000` を有効にすると、Spotify 側で現在再生中の track を polling し、foobar2000 側でも `spotify:track:...` 仮想トラックとして再生開始します。Jam 専用 API は Spotify Web API にないため、Jam か通常再生かは判定せず「自分の Spotify アカウントの現在再生」を追従します。
 
 対応 URL 例:
 

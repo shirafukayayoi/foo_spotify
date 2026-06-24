@@ -116,6 +116,25 @@ std::optional<int> jsonIntValueLocal(const std::string &json, const std::string 
     return std::atoi(json.substr(pos, end - pos).c_str());
 }
 
+std::optional<bool> jsonBoolValueLocal(const std::string &json, const std::string &key)
+{
+    const std::string marker = "\"" + key + "\"";
+    size_t pos = json.find(marker);
+    if (pos == std::string::npos)
+        return std::nullopt;
+    pos = json.find(':', pos + marker.size());
+    if (pos == std::string::npos)
+        return std::nullopt;
+    ++pos;
+    while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos])))
+        ++pos;
+    if (json.compare(pos, 4, "true") == 0)
+        return true;
+    if (json.compare(pos, 5, "false") == 0)
+        return false;
+    return std::nullopt;
+}
+
 std::optional<std::string> trackIdFromUri(const std::string &spotifyTrackUri)
 {
     const std::string prefix = "spotify:track:";
@@ -266,6 +285,25 @@ std::optional<SpotifyTrackInfo> SpotifyApiClient::getTrackInfo(const std::string
         info.album = *album;
     if (const auto duration = jsonIntValueLocal(response->body, "duration_ms"))
         info.durationMs = *duration;
+    return info;
+}
+
+std::optional<SpotifyPlaybackInfo> SpotifyApiClient::getCurrentPlayback()
+{
+    const auto response = callSpotifyGet(L"https://api.spotify.com/v1/me/player/currently-playing");
+    if (!response || response->status == 204 || response->status < 200 || response->status >= 300)
+        return std::nullopt;
+
+    const auto uri = firstSpotifyUri(response->body, "spotify:track:");
+    if (!uri)
+        return std::nullopt;
+
+    SpotifyPlaybackInfo info;
+    info.trackUri = *uri;
+    if (const auto progress = jsonIntValueLocal(response->body, "progress_ms"))
+        info.progressMs = *progress;
+    if (const auto playing = jsonBoolValueLocal(response->body, "is_playing"))
+        info.isPlaying = *playing;
     return info;
 }
 } // namespace fsl
