@@ -16,6 +16,7 @@ std::mutex g_followStateMutex;
 bool g_followPrimed = false;
 std::string g_lastFollowedUri;
 std::set<std::string> g_seenQueueUris;
+std::map<std::string, std::chrono::steady_clock::time_point> g_suppressedFollowUris;
 
 template <typename PlaylistManagerPtr>
 bool findSpotifyUriInActivePlaylist(PlaylistManagerPtr &playlists, const std::string &uri, t_size &index)
@@ -146,6 +147,16 @@ bool markFollowedPlaybackUri(const std::string &uri)
 {
     std::lock_guard<std::mutex> lock(g_followStateMutex);
     g_seenQueueUris.insert(uri);
+    const auto suppressed = g_suppressedFollowUris.find(uri);
+    if (suppressed != g_suppressedFollowUris.end())
+    {
+        if (std::chrono::steady_clock::now() < suppressed->second)
+        {
+            g_lastFollowedUri = uri;
+            return false;
+        }
+        g_suppressedFollowUris.erase(suppressed);
+    }
     if (uri == g_lastFollowedUri)
         return false;
     g_lastFollowedUri = uri;
@@ -169,6 +180,16 @@ void suppressVirtualSpotifyPlaybackFor(std::chrono::milliseconds duration)
 {
     std::lock_guard<std::mutex> lock(g_suppressMutex);
     g_suppressUntil = std::chrono::steady_clock::now() + duration;
+}
+
+void suppressFollowedSpotifyTrack(const std::string &spotifyTrackUri, std::chrono::milliseconds duration)
+{
+    if (spotifyTrackUri.rfind("spotify:track:", 0) != 0)
+        return;
+
+    std::lock_guard<std::mutex> lock(g_followStateMutex);
+    g_suppressedFollowUris[spotifyTrackUri] = std::chrono::steady_clock::now() + duration;
+    g_seenQueueUris.insert(spotifyTrackUri);
 }
 
 void startFollowedSpotifyTrackInFoobar(const std::string &spotifyTrackUri, double positionSeconds)
