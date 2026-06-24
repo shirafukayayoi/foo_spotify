@@ -15,6 +15,22 @@ bool g_workerStop = false;
 std::string g_lastFollowedUri;
 std::set<std::string> g_seenQueueUris;
 
+template <typename PlaylistManagerPtr>
+bool findSpotifyUriInActivePlaylist(PlaylistManagerPtr &playlists, const std::string &uri, t_size &index)
+{
+    const t_size count = playlists->activeplaylist_get_item_count();
+    for (t_size i = 0; i < count; ++i)
+    {
+        metadb_handle_ptr handle;
+        if (playlists->activeplaylist_get_item_handle(handle, i) && std::strcmp(handle->get_path(), uri.c_str()) == 0)
+        {
+            index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
 class StartSpotifyTrackCallback : public main_thread_callback
 {
 public:
@@ -29,17 +45,22 @@ public:
             return;
 
         auto playlists = static_api_ptr_t<playlist_manager>();
-        const t_size insertAt = playlists->activeplaylist_get_item_count();
-        const char *uri = m_uri.c_str();
-        if (!playlists->activeplaylist_insert_locations(insertAt, pfc::list_single_ref_t<const char *>(uri), true, core_api::get_main_window()))
+        t_size targetIndex = SIZE_MAX;
+        if (!findSpotifyUriInActivePlaylist(playlists, m_uri, targetIndex))
         {
-            FB2K_console_formatter() << "foo_spotify_linker: Spotify follow item を追加できません: " << m_uri.c_str();
-            return;
+            targetIndex = playlists->activeplaylist_get_item_count();
+            const char *uri = m_uri.c_str();
+            if (!playlists->activeplaylist_insert_locations(targetIndex, pfc::list_single_ref_t<const char *>(uri), true, core_api::get_main_window()))
+            {
+                FB2K_console_formatter() << "foo_spotify_linker: Spotify follow item を追加できません: " << m_uri.c_str();
+                return;
+            }
         }
-        playlists->activeplaylist_set_focus_item(insertAt);
+        playlists->activeplaylist_set_focus_item(targetIndex);
+        playlists->activeplaylist_ensure_visible(targetIndex);
 
         suppressVirtualSpotifyPlaybackFor(std::chrono::seconds(5));
-        playlists->activeplaylist_execute_default_action(insertAt);
+        playlists->activeplaylist_execute_default_action(targetIndex);
         if (m_positionSeconds > 1.0)
             static_api_ptr_t<play_control>()->playback_seek(m_positionSeconds);
     }
@@ -63,6 +84,10 @@ public:
         t_size insertAt = playlists->activeplaylist_get_item_count();
         for (const std::string &uriText : m_uris)
         {
+            t_size existing = SIZE_MAX;
+            if (findSpotifyUriInActivePlaylist(playlists, uriText, existing))
+                continue;
+
             const char *uri = uriText.c_str();
             if (playlists->activeplaylist_insert_locations(insertAt, pfc::list_single_ref_t<const char *>(uri), false, core_api::get_main_window()))
                 ++insertAt;
