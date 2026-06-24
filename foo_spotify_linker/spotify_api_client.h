@@ -38,5 +38,6 @@ public:
     std::optional<SpotifyTrackInfo> getTrackInfo(const std::string &spotifyTrackUri);
     std::optional<SpotifyPlaybackInfo> getCurrentPlayback();
     std::vector<std::string> getQueueTrackUris();
+    std::vector<std::string> getPlaylistTrackUris(const std::string &spotifyPlaylistUri);
 };
 } // namespace fsl

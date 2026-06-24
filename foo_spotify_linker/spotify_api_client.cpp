@@ -167,6 +167,14 @@ std::optional<std::string> trackIdFromUri(const std::string &spotifyTrackUri)
         return std::nullopt;
     return spotifyTrackUri.substr(prefix.size());
 }
+
+std::optional<std::string> playlistIdFromUri(const std::string &spotifyPlaylistUri)
+{
+    const std::string prefix = "spotify:playlist:";
+    if (spotifyPlaylistUri.rfind(prefix, 0) != 0 || spotifyPlaylistUri.size() <= prefix.size())
+        return std::nullopt;
+    return spotifyPlaylistUri.substr(prefix.size());
+}
 } // namespace
 
 SpotifyResult SpotifyApiClient::play(const std::string &spotifyUri, double positionSeconds)
@@ -338,5 +346,35 @@ std::vector<std::string> SpotifyApiClient::getQueueTrackUris()
     if (!response || response->status < 200 || response->status >= 300)
         return {};
     return spotifyUris(response->body, "spotify:track:");
+}
+
+std::vector<std::string> SpotifyApiClient::getPlaylistTrackUris(const std::string &spotifyPlaylistUri)
+{
+    const auto id = playlistIdFromUri(spotifyPlaylistUri);
+    if (!id)
+        return {};
+
+    std::vector<std::string> out;
+    std::string next = "https://api.spotify.com/v1/playlists/" + *id + "/tracks?fields=items(track(uri)),next&limit=100";
+    for (int page = 0; page < 20 && !next.empty(); ++page)
+    {
+        const std::wstring url(next.begin(), next.end());
+        const auto response = callSpotifyGet(url);
+        if (!response || response->status < 200 || response->status >= 300)
+            break;
+
+        const auto uris = spotifyUris(response->body, "spotify:track:");
+        for (const auto &uri : uris)
+        {
+            if (std::find(out.begin(), out.end(), uri) == out.end())
+                out.push_back(uri);
+        }
+
+        const auto nextUrl = jsonStringValue(response->body, "next");
+        next = nextUrl ? *nextUrl : "";
+        if (next == "null")
+            next.clear();
+    }
+    return out;
 }
 } // namespace fsl

@@ -123,6 +123,69 @@ std::optional<HttpResponse> httpRequest(const wchar_t *method,
     return HttpResponse{static_cast<int>(status), responseBody};
 }
 
+std::optional<std::string> httpFinalUrl(const std::string &url)
+{
+    const std::wstring wideUrl = widen(url);
+    URL_COMPONENTS parts{};
+    parts.dwStructSize = sizeof(parts);
+    parts.dwSchemeLength = static_cast<DWORD>(-1);
+    parts.dwHostNameLength = static_cast<DWORD>(-1);
+    parts.dwUrlPathLength = static_cast<DWORD>(-1);
+    parts.dwExtraInfoLength = static_cast<DWORD>(-1);
+    if (!WinHttpCrackUrl(wideUrl.c_str(), 0, 0, &parts))
+        return std::nullopt;
+
+    const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
+    std::wstring path(parts.lpszUrlPath, parts.dwUrlPathLength);
+    path.append(parts.lpszExtraInfo ? std::wstring(parts.lpszExtraInfo, parts.dwExtraInfoLength) : L"");
+
+    HINTERNET session = WinHttpOpen(L"foo_spotify_linker/0.1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+                                    WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!session)
+        return std::nullopt;
+    HINTERNET connect = WinHttpConnect(session, host.c_str(), parts.nPort, 0);
+    if (!connect)
+    {
+        WinHttpCloseHandle(session);
+        return std::nullopt;
+    }
+    const DWORD flags = parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0;
+    HINTERNET request = WinHttpOpenRequest(connect, L"GET", path.c_str(), nullptr, WINHTTP_NO_REFERER,
+                                           WINHTTP_DEFAULT_ACCEPT_TYPES, flags);
+    if (!request)
+    {
+        WinHttpCloseHandle(connect);
+        WinHttpCloseHandle(session);
+        return std::nullopt;
+    }
+    if (!WinHttpSendRequest(request, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0) ||
+        !WinHttpReceiveResponse(request, nullptr))
+    {
+        WinHttpCloseHandle(request);
+        WinHttpCloseHandle(connect);
+        WinHttpCloseHandle(session);
+        return std::nullopt;
+    }
+
+    DWORD size = 0;
+    WinHttpQueryOption(request, WINHTTP_OPTION_URL, nullptr, &size);
+    std::wstring finalUrl(size / sizeof(wchar_t), L'\0');
+    if (!finalUrl.empty() && WinHttpQueryOption(request, WINHTTP_OPTION_URL, finalUrl.data(), &size))
+    {
+        if (!finalUrl.empty() && finalUrl.back() == L'\0')
+            finalUrl.pop_back();
+    }
+    else
+    {
+        finalUrl = wideUrl;
+    }
+
+    WinHttpCloseHandle(request);
+    WinHttpCloseHandle(connect);
+    WinHttpCloseHandle(session);
+    return pfc::stringcvt::string_utf8_from_wide(finalUrl.c_str()).get_ptr();
+}
+
 std::optional<std::string> jsonStringValue(const std::string &json, const std::string &key)
 {
     const std::string needle = "\"" + key + "\"";

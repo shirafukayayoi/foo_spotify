@@ -182,7 +182,7 @@ bool AuthManager::beginLogin(std::string &message)
     }
 
     const std::string state = randomUrlSafe(32);
-    const std::string scope = "user-modify-playback-state user-read-playback-state";
+    const std::string scope = "user-modify-playback-state user-read-playback-state playlist-read-private playlist-read-collaborative";
     const std::string authorize =
         "https://accounts.spotify.com/authorize?response_type=code&client_id=" + urlEncode(clientId.c_str()) +
         "&scope=" + urlEncode(scope) +
