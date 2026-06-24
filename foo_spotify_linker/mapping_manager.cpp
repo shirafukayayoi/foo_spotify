@@ -75,11 +75,19 @@ bool MappingManager::exec(const char *sql)
 
 std::optional<std::string> MappingManager::resolve(const TrackMetadata &metadata)
 {
+    const std::string localHash = makeLocalHash(metadata);
+    if (const auto track = getTrackMapping(localHash))
+        return track;
+
+    return getAlbumMapping(makeAlbumId(metadata));
+}
+
+std::optional<std::string> MappingManager::getTrackMapping(const std::string &localHash)
+{
     std::lock_guard<std::mutex> lock(m_mutex);
     if (!m_db)
         return std::nullopt;
 
-    const std::string localHash = makeLocalHash(metadata);
     sqlite3_stmt *stmt = nullptr;
     if (sqlite3_prepare_v2(m_db, "SELECT spotify_uri FROM track_map WHERE local_hash = ?", -1, &stmt, nullptr) != SQLITE_OK)
         return std::nullopt;
@@ -93,15 +101,21 @@ std::optional<std::string> MappingManager::resolve(const TrackMetadata &metadata
             result = reinterpret_cast<const char *>(text);
     }
     sqlite3_finalize(stmt);
-    if (result)
-        return result;
+    return result;
+}
 
-    const std::string albumId = makeAlbumId(metadata);
-    stmt = nullptr;
+std::optional<std::string> MappingManager::getAlbumMapping(const std::string &albumId)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!m_db)
+        return std::nullopt;
+
+    sqlite3_stmt *stmt = nullptr;
     if (sqlite3_prepare_v2(m_db, "SELECT spotify_album_uri FROM album_map WHERE album_id = ?", -1, &stmt, nullptr) != SQLITE_OK)
         return std::nullopt;
 
     sqlite3_bind_text(stmt, 1, albumId.c_str(), -1, SQLITE_TRANSIENT);
+    std::optional<std::string> result;
     if (sqlite3_step(stmt) == SQLITE_ROW)
     {
         const unsigned char *text = sqlite3_column_text(stmt, 0);

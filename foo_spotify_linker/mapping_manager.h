@@ -14,6 +14,8 @@ public:
     bool isOpen() const;
 
     std::optional<std::string> resolve(const TrackMetadata &metadata);
+    std::optional<std::string> getTrackMapping(const std::string &localHash);
+    std::optional<std::string> getAlbumMapping(const std::string &albumId);
     bool addTrackMapping(const std::string &localHash, const std::string &spotifyUri);
     bool removeTrackMapping(const std::string &localHash);
     bool addAlbumMapping(const std::string &albumId, const std::string &spotifyUri);

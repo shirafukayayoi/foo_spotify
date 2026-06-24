@@ -15,6 +15,8 @@ static constexpr GUID guid_context_set_album_uri = {0x6a0814c9, 0xd18b, 0x4d29, 
 static constexpr GUID guid_context_remove_album_uri = {0x51edbc36, 0x594f, 0x43c8, {0xb9, 0xc0, 0x86, 0x7d, 0x11, 0x53, 0x0d, 0x98}};
 static constexpr GUID guid_context_auto_track_uri = {0x61dbe2b0, 0x224f, 0x44b2, {0xa1, 0x17, 0x87, 0x4a, 0x49, 0x5d, 0x49, 0xe3}};
 static constexpr GUID guid_context_auto_album_uri = {0x7b442be6, 0xef43, 0x43ab, {0x9d, 0x3a, 0x5d, 0x16, 0xb4, 0x32, 0x98, 0x40}};
+static constexpr GUID guid_context_show_track_uri = {0x652a626d, 0x847f, 0x4c64, {0x92, 0x0f, 0xa4, 0x78, 0xd4, 0xd6, 0x9a, 0x56}};
+static constexpr GUID guid_context_show_album_uri = {0xb6985adc, 0xc2b4, 0x4a87, {0xaf, 0x0b, 0x2f, 0xd0, 0xf9, 0x89, 0xe5, 0x2a}};
 
 enum class SpotifyUriKind
 {
@@ -127,9 +129,11 @@ public:
     {
         cmd_set_uri = 0,
         cmd_auto_track_uri,
+        cmd_show_track_uri,
         cmd_remove_uri,
         cmd_set_album_uri,
         cmd_auto_album_uri,
+        cmd_show_album_uri,
         cmd_remove_album_uri,
         cmd_count
     };
@@ -149,6 +153,9 @@ public:
         case cmd_auto_track_uri:
             out = "Auto Set Track URI";
             return;
+        case cmd_show_track_uri:
+            out = "Show Track URI";
+            return;
         case cmd_remove_uri:
             out = "Remove Track URI";
             return;
@@ -157,6 +164,9 @@ public:
             return;
         case cmd_auto_album_uri:
             out = "Auto Set Album URI";
+            return;
+        case cmd_show_album_uri:
+            out = "Show Album URI";
             return;
         case cmd_remove_album_uri:
             out = "Remove Album URI";
@@ -179,11 +189,17 @@ public:
         case cmd_auto_track_uri:
             out = "選択トラックのタグから Spotify track を検索して登録します。";
             return true;
+        case cmd_show_track_uri:
+            out = "選択トラックに登録済みの Spotify track URI を表示します。";
+            return true;
         case cmd_set_album_uri:
             out = "選択トラックのアルバムへ Spotify album URI を手動マッピングします。";
             return true;
         case cmd_auto_album_uri:
             out = "選択トラックのアルバムタグから Spotify album を検索して登録します。";
+            return true;
+        case cmd_show_album_uri:
+            out = "選択トラックのアルバムに登録済みの Spotify album URI を表示します。";
             return true;
         case cmd_remove_album_uri:
             out = "選択トラックのアルバム単位 Spotify URI マッピングを削除します。";
@@ -203,10 +219,14 @@ public:
             return guid_context_remove_uri;
         case cmd_auto_track_uri:
             return guid_context_auto_track_uri;
+        case cmd_show_track_uri:
+            return guid_context_show_track_uri;
         case cmd_set_album_uri:
             return guid_context_set_album_uri;
         case cmd_auto_album_uri:
             return guid_context_auto_album_uri;
+        case cmd_show_album_uri:
+            return guid_context_show_album_uri;
         case cmd_remove_album_uri:
             return guid_context_remove_album_uri;
         default:
@@ -226,6 +246,12 @@ public:
 
         const TrackMetadata metadata = readTrackMetadata(data.get_item(0));
         const std::string localHash = makeLocalHash(metadata);
+        if (index == cmd_show_track_uri)
+        {
+            const auto uri = MappingManager::instance().getTrackMapping(localHash);
+            popup_message::g_show((uri ? "Track URI:\n" + *uri : "Track URI は未登録です。").c_str(), "Spotify Linker");
+            return;
+        }
         if (index == cmd_remove_uri)
         {
             MappingManager::instance().removeTrackMapping(localHash);
@@ -242,6 +268,12 @@ public:
             }
             MappingManager::instance().addTrackMapping(localHash, *uri);
             popup_message::g_show(("Track URI を登録しました:\n" + *uri).c_str(), "Spotify Linker");
+            return;
+        }
+        if (index == cmd_show_album_uri)
+        {
+            const auto uri = MappingManager::instance().getAlbumMapping(makeAlbumId(metadata));
+            popup_message::g_show((uri ? "Album URI:\n" + *uri : "Album URI は未登録です。").c_str(), "Spotify Linker");
             return;
         }
         if (index == cmd_remove_album_uri)
