@@ -96,7 +96,7 @@ spotify:playlist:...
 この方式では foobar2000 側も再生中になるため、Playback Statistics 系の再生時間加算対象にできます。ただし Spotify 音源を foobar2000 でデコードしているわけではなく、foobar2000 は無音 PCM を流し、Spotify Web API で再生、pause、seek、音量を同期します。仮想トラック再生時の Spotify 音量は foobar2000 の現在音量に合わせます。
 仮想トラックのアルバムアートは Spotify track 情報の `album.images` から取得します。初回表示時に画像を取得し、以後は URI / 画像 URL 単位でメモリキャッシュします。
 
-Jam 招待リンク (`open.spotify.com/socialsession/...` や、その `spotify.link` 短縮 URL) は Spotify Web API から固定の曲一覧を直接取得できません。このプラグインでは Jam リンクを track と誤判定せず、Spotify 側で現在再生中の曲と queue 先頭の次曲だけを新規 playlist へ追加します。`Preferences > Tools > Spotify Linker` の `Follow Spotify playback in foobar2000` を有効にすると、Jam 専用 playlist で1曲再生し終わるたびに Spotify queue 先頭から次の1曲を補充します。
+Jam 招待リンク (`open.spotify.com/socialsession/...` や、その `spotify.link` 短縮 URL) は Spotify Web API から固定の曲一覧を直接取得できません。このプラグインでは Jam リンクを track と誤判定せず、Spotify 側で現在再生中の曲と queue 先頭の次曲だけを `Spotify Jam` playlist へ追加します。既に `Spotify Jam` playlist があればそれを再利用します。`Preferences > Tools > Spotify Linker` の `Follow Spotify playback in foobar2000` を有効にすると、Jam 専用 playlist で1曲再生し終わるたびに Spotify queue 先頭から次の1曲を補充します。
 
 `Follow Spotify playback in foobar2000` を有効にすると、Spotify 側で現在再生中の track を polling し、foobar2000 側でも `spotify:track:...` 仮想トラックとして再生開始します。あわせて Spotify の queue 先頭に見える次曲を active playlist へ1曲ずつ追加します。Jam 専用 API は Spotify Web API にないため、Jam か通常再生かは判定せず「自分の Spotify アカウントの現在再生」と「自分の Spotify queue」を追従します。
 foobar2000 起動直後の最初の polling では、Spotify の現在再生と queue を既読として記録するだけで、playlist への追加や再生開始は行いません。これにより、Spotify 側で Jam を開いたまま foobar2000 を起動しても、起動直後に大量追加されることを避けます。

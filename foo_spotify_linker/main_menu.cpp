@@ -123,10 +123,30 @@ std::optional<SpotifyLink> parseSpotifyLink(std::string input)
     return std::nullopt;
 }
 
-void addLocationsToNewPlaylist(const std::vector<std::string> &uris, const char *playlistName, bool select)
+template <typename PlaylistManagerPtr>
+std::optional<t_size> findPlaylistByName(PlaylistManagerPtr &playlists, const char *playlistName)
+{
+    const t_size count = playlists->get_playlist_count();
+    for (t_size index = 0; index < count; ++index)
+    {
+        pfc::string8 name;
+        if (playlists->playlist_get_name(index, name) && std::strcmp(name.c_str(), playlistName) == 0)
+            return index;
+    }
+    return std::nullopt;
+}
+
+void addLocationsToPlaylist(const std::vector<std::string> &uris, const char *playlistName, bool select, bool reuseExisting)
 {
     auto playlists = static_api_ptr_t<playlist_manager>();
-    const t_size playlist = playlists->create_playlist(playlistName, SIZE_MAX, SIZE_MAX);
+    t_size playlist = SIZE_MAX;
+    if (reuseExisting)
+    {
+        if (const auto existing = findPlaylistByName(playlists, playlistName))
+            playlist = *existing;
+    }
+    if (playlist == SIZE_MAX)
+        playlist = playlists->create_playlist(playlistName, SIZE_MAX, SIZE_MAX);
     if (playlist == SIZE_MAX)
     {
         popup_message::g_show("新しい playlist を作成できませんでした。", "Spotify Linker");
@@ -134,18 +154,24 @@ void addLocationsToNewPlaylist(const std::vector<std::string> &uris, const char 
     }
 
     playlists->set_active_playlist(playlist);
-    t_size insertAt = 0;
+    const t_size firstInserted = playlists->playlist_get_item_count(playlist);
+    t_size insertAt = firstInserted;
     for (const auto &text : uris)
     {
         const char *uri = text.c_str();
         if (playlists->playlist_insert_locations(playlist, insertAt, pfc::list_single_ref_t<const char *>(uri), select, core_api::get_main_window()))
             ++insertAt;
     }
-    if (insertAt > 0)
+    if (insertAt > firstInserted)
     {
-        playlists->playlist_set_focus_item(playlist, 0);
-        playlists->playlist_ensure_visible(playlist, 0);
+        playlists->playlist_set_focus_item(playlist, firstInserted);
+        playlists->playlist_ensure_visible(playlist, firstInserted);
     }
+}
+
+void addLocationsToNewPlaylist(const std::vector<std::string> &uris, const char *playlistName, bool select)
+{
+    addLocationsToPlaylist(uris, playlistName, select, false);
 }
 
 class AddSpotifyLinkDialog : public CDialogImpl<AddSpotifyLinkDialog>
@@ -257,8 +283,8 @@ public:
                 popup_message::g_show("Jam の中身は Spotify Web API から直接取得できません。Jam に参加して再生中にしてから、もう一度追加してください。", "Spotify Linker");
                 return;
             }
-            addLocationsToNewPlaylist(tracks, "Spotify Jam", false);
-            popup_message::g_show(("Jam の現在再生と次の曲から " + std::to_string(tracks.size()) + " 曲を追加しました。以後は Follow Spotify playback で1曲ずつ補充します。").c_str(), "Spotify Linker");
+            addLocationsToPlaylist(tracks, "Spotify Jam", false, true);
+            popup_message::g_show(("Spotify Jam に現在再生と次の曲から " + std::to_string(tracks.size()) + " 曲を追加しました。以後は Follow Spotify playback で1曲ずつ補充します。").c_str(), "Spotify Linker");
             return;
         }
 
