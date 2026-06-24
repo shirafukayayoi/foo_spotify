@@ -398,6 +398,14 @@ std::optional<std::string> playlistIdFromUri(const std::string &spotifyPlaylistU
         return std::nullopt;
     return spotifyPlaylistUri.substr(prefix.size());
 }
+
+std::optional<std::string> albumIdFromUri(const std::string &spotifyAlbumUri)
+{
+    const std::string prefix = "spotify:album:";
+    if (spotifyAlbumUri.rfind(prefix, 0) != 0 || spotifyAlbumUri.size() <= prefix.size())
+        return std::nullopt;
+    return spotifyAlbumUri.substr(prefix.size());
+}
 } // namespace
 
 SpotifyResult SpotifyApiClient::play(const std::string &spotifyUri, double positionSeconds)
@@ -566,6 +574,29 @@ std::optional<SpotifyTrackInfo> SpotifyApiClient::getTrackInfo(const std::string
     if (const auto duration = jsonIntValueLocal(response->body, "duration_ms"))
         info.durationMs = *duration;
     return info;
+}
+
+std::optional<std::string> SpotifyApiClient::getAlbumTrackUri(const std::string &spotifyAlbumUri, int zeroBasedOffset)
+{
+    const auto id = albumIdFromUri(spotifyAlbumUri);
+    if (!id)
+        return std::nullopt;
+    if (zeroBasedOffset < 0)
+        zeroBasedOffset = 0;
+
+    const int limit = 50;
+    const int offset = (zeroBasedOffset / limit) * limit;
+    const std::wstring url = L"https://api.spotify.com/v1/albums/" + std::wstring(id->begin(), id->end()) +
+                             L"/tracks?limit=" + std::to_wstring(limit) + L"&offset=" + std::to_wstring(offset);
+    const auto response = callSpotifyGet(url);
+    if (!response || response->status < 200 || response->status >= 300)
+        return std::nullopt;
+
+    const auto uris = spotifyUris(response->body, "spotify:track:");
+    const size_t localIndex = static_cast<size_t>(zeroBasedOffset - offset);
+    if (localIndex >= uris.size())
+        return std::nullopt;
+    return uris[localIndex];
 }
 
 std::optional<SpotifyPlaybackInfo> SpotifyApiClient::getCurrentPlayback()

@@ -63,6 +63,21 @@ bool normalizeSpotifyUri(std::string input, SpotifyUriKind kind, std::string &ou
     return false;
 }
 
+bool normalizeSpotifyUriAny(std::string input, std::string &out, SpotifyUriKind &kind)
+{
+    if (normalizeSpotifyUri(input, SpotifyUriKind::track, out))
+    {
+        kind = SpotifyUriKind::track;
+        return true;
+    }
+    if (normalizeSpotifyUri(input, SpotifyUriKind::album, out))
+    {
+        kind = SpotifyUriKind::album;
+        return true;
+    }
+    return false;
+}
+
 class UriDialog : public CDialogImpl<UriDialog>
 {
 public:
@@ -76,6 +91,11 @@ public:
     std::string uri() const
     {
         return m_uri;
+    }
+
+    SpotifyUriKind resolvedKind() const
+    {
+        return m_resolvedKind;
     }
 
     BEGIN_MSG_MAP_EX(UriDialog)
@@ -103,12 +123,17 @@ private:
         CString value;
         GetDlgItemText(IDC_EDIT_SPOTIFY_URI, value);
         std::string normalized;
-        if (!normalizeSpotifyUri(pfc::stringcvt::string_utf8_from_os(value).get_ptr(), m_kind, normalized))
+        SpotifyUriKind resolvedKind = m_kind;
+        const bool ok = m_kind == SpotifyUriKind::track
+                            ? normalizeSpotifyUriAny(pfc::stringcvt::string_utf8_from_os(value).get_ptr(), normalized, resolvedKind)
+                            : normalizeSpotifyUri(pfc::stringcvt::string_utf8_from_os(value).get_ptr(), m_kind, normalized);
+        if (!ok)
         {
             popup_message::g_show("Spotify URI または open.spotify.com の URL を入力してください。", "Spotify Linker");
             return;
         }
         m_uri = normalized;
+        m_resolvedKind = resolvedKind;
         EndDialog(IDOK);
     }
 
@@ -119,6 +144,7 @@ private:
 
     TrackMetadata m_metadata;
     SpotifyUriKind m_kind;
+    SpotifyUriKind m_resolvedKind = SpotifyUriKind::track;
     std::string m_uri;
 };
 
@@ -312,9 +338,25 @@ public:
         if (dialog.DoModal(core_api::get_main_window()) == IDOK)
         {
             if (albumMode)
+            {
                 MappingManager::instance().addAlbumMapping(makeAlbumId(metadata), dialog.uri());
+            }
             else
-                MappingManager::instance().addTrackMapping(localHash, dialog.uri());
+            {
+                std::string trackUri = dialog.uri();
+                if (dialog.resolvedKind() == SpotifyUriKind::album)
+                {
+                    const int offset = metadata.trackNumber > 0 ? metadata.trackNumber - 1 : 0;
+                    const auto resolved = SpotifyApiClient().getAlbumTrackUri(dialog.uri(), offset);
+                    if (!resolved)
+                    {
+                        popup_message::g_show("Album URI から該当トラックを取得できませんでした。", "Spotify Linker");
+                        return;
+                    }
+                    trackUri = *resolved;
+                }
+                MappingManager::instance().addTrackMapping(localHash, trackUri);
+            }
         }
     }
 

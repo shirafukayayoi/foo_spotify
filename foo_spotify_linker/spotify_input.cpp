@@ -99,6 +99,7 @@ public:
         abort.check();
         m_position = 0.0;
         m_started = false;
+        m_endGraceUntil = {};
         if (flags & input_flag_playback)
             startSpotifyPlayback(0.0);
     }
@@ -107,7 +108,10 @@ public:
     {
         abort.check();
         if (m_position >= m_length)
-            return false;
+        {
+            if (!repeatIfSpotifyLooped(abort))
+                return false;
+        }
 
         const double remaining = m_length - m_position;
         const unsigned samples = static_cast<unsigned>(std::min<double>(chunkSamples, remaining * sampleRate));
@@ -128,6 +132,7 @@ public:
         if (seconds > m_length)
             seconds = m_length;
         m_position = seconds;
+        m_endGraceUntil = {};
         startSpotifyPlayback(seconds);
     }
 
@@ -192,11 +197,43 @@ private:
         m_started = result.ok;
     }
 
+    bool repeatIfSpotifyLooped(abort_callback &abort)
+    {
+        abort.check();
+        if (m_uri.empty())
+            return false;
+
+        const auto now = std::chrono::steady_clock::now();
+        if (m_endGraceUntil.time_since_epoch().count() == 0)
+            m_endGraceUntil = now + std::chrono::seconds(3);
+        if (now > m_endGraceUntil)
+        {
+            m_endGraceUntil = {};
+            return false;
+        }
+
+        const auto playback = SpotifyApiClient().getCurrentPlayback();
+        abort.check();
+        if (!playback || !playback->isPlaying || playback->trackUri != m_uri)
+            return false;
+
+        if (playback->progressMs >= 0 && playback->progressMs <= 5000)
+        {
+            m_position = static_cast<double>(playback->progressMs) / 1000.0;
+            m_endGraceUntil = {};
+            return true;
+        }
+
+        m_position = m_length > 0.25 ? m_length - 0.25 : 0.0;
+        return true;
+    }
+
     std::string m_uri;
     SpotifyTrackInfo m_info;
     double m_length = fallbackLengthSeconds;
     double m_position = 0.0;
     bool m_started = false;
+    std::chrono::steady_clock::time_point m_endGraceUntil{};
 };
 
 static input_singletrack_factory_t<SpotifyTrackInput> g_spotifyTrackInputFactory;

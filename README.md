@@ -50,6 +50,7 @@ vcpkg install sqlite3 nlohmann-json curl openssl fmt
 - Spotify Web API による再生、pause、seek、音量制御
 - SQLite による `track_map` / `album_map` / `config` テーブル作成
 - 右クリックメニュー `Spotify Linker` からの Spotify track / album URI 手動登録、自動登録、削除
+- Track URI手動登録で album URL / URI を入力した場合、選択曲のトラック番号に対応する Spotify track URI へ解決して登録
 - Spotify URL の正規化 (`https://open.spotify.com/intl-ja/track/...` などのロケール付き URL を含む)
 - `File > Add > Spotify Linker > Add Spotify Link...` からの Spotify track / album / playlist / Jam リンク追加
 - `File > Add > Spotify Linker > Auto Link Library Tracks` からの Media Library 一括自動連携
@@ -96,6 +97,7 @@ spotify:playlist:...
 
 この方式では foobar2000 側も再生中になるため、Playback Statistics 系の再生時間加算対象にできます。ただし Spotify 音源を foobar2000 でデコードしているわけではなく、foobar2000 は無音 PCM を流し、Spotify Web API で再生、pause、seek、音量を同期します。仮想トラック再生時の Spotify 音量は foobar2000 の現在音量に合わせます。
 仮想トラックのアルバムアートは Spotify track 情報の `album.images` から取得します。初回表示時に画像を取得し、以後は URI / 画像 URL 単位でメモリキャッシュします。
+Spotify 側で同一曲リピートが有効な場合、仮想トラック終端後にSpotify側の再生位置が曲頭へ戻ったことを検出すると、foobar2000側の仮想トラックも先頭へ戻して再生を継続します。
 
 Jam 招待リンク (`open.spotify.com/socialsession/...` や、その `spotify.link` 短縮 URL) は Spotify Web API から固定の曲一覧を直接取得できません。このプラグインでは Jam リンクを track と誤判定せず、Spotify 側で現在再生中の曲と queue 先頭の次曲だけを `Spotify Jam` playlist へ追加します。既に `Spotify Jam` playlist があればそれを再利用します。`Preferences > Tools > Spotify Linker` の `Follow Spotify playback in foobar2000` を有効にすると、Jam 専用 playlist で1曲再生し終わるたびに Spotify queue 先頭から次の1曲を補充します。
 
