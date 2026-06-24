@@ -22,6 +22,27 @@ double secondsFromMs(int ms)
     return ms > 0 ? static_cast<double>(ms) / 1000.0 : fallbackLengthSeconds;
 }
 
+int foobarVolumePercent()
+{
+    float volumeDb = 0.0f;
+    try
+    {
+        volumeDb = static_api_ptr_t<play_control>()->get_volume();
+    }
+    catch (...)
+    {
+        return 100;
+    }
+
+    if (volumeDb <= play_control::volume_mute)
+        return 0;
+    if (volumeDb >= 0.0f)
+        return 100;
+
+    const double linear = std::pow(10.0, static_cast<double>(volumeDb) / 20.0);
+    return pfc::clip_t<int>(static_cast<int>(std::lround(linear * 100.0)), 0, 100);
+}
+
 class SpotifyTrackInput : public input_stubs
 {
 public:
@@ -157,7 +178,7 @@ private:
         if (m_uri.empty())
             return;
         SpotifyApiClient client;
-        const SpotifyResult result = client.play(m_uri, positionSeconds);
+        const SpotifyResult result = client.playVirtualTrack(m_uri, positionSeconds, foobarVolumePercent());
         if (!result.ok)
             FB2K_console_formatter() << "foo_spotify_linker: Spotify virtual playback failed: " << result.message.c_str();
         m_started = result.ok;

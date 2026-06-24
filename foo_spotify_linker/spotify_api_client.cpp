@@ -152,6 +152,24 @@ SpotifyResult SpotifyApiClient::play(const std::string &spotifyUri, double posit
     return result;
 }
 
+SpotifyResult SpotifyApiClient::playVirtualTrack(const std::string &spotifyTrackUri, double positionSeconds, int volumePercent)
+{
+    const int posMs = static_cast<int>(positionSeconds * 1000.0);
+    std::wstring url = playbackUrl(L"/play");
+    pfc::string8 device = g_cfg_default_device_id.get();
+    if (!device.is_empty())
+        url += L"?device_id=" + std::wstring(device.c_str(), device.c_str() + std::strlen(device.c_str()));
+
+    setVolume(volumePercent);
+    const std::string body = "{\"uris\":[\"" + spotifyTrackUri + "\"],\"position_ms\":" + std::to_string(posMs) + "}";
+    const SpotifyResult result = callPlayerApi(L"PUT", url, body, true);
+    if (result.ok)
+        setVolume(volumePercent);
+    else
+        FB2K_console_formatter() << "foo_spotify_linker: Spotify virtual play failed: " << result.message.c_str();
+    return result;
+}
+
 SpotifyResult SpotifyApiClient::playAlbum(const std::string &spotifyAlbumUri, int zeroBasedOffset, double positionSeconds)
 {
     if (zeroBasedOffset < 0)

@@ -13,6 +13,17 @@ bool isSpotifyVirtualTrack(const std::string &path)
     return path.rfind("spotify:track:", 0) == 0;
 }
 
+int foobarVolumeDbToPercent(float volumeDb)
+{
+    if (volumeDb <= play_control::volume_mute)
+        return 0;
+    if (volumeDb >= 0.0f)
+        return 100;
+
+    const double linear = std::pow(10.0, static_cast<double>(volumeDb) / 20.0);
+    return pfc::clip_t<int>(static_cast<int>(std::lround(linear * 100.0)), 0, 100);
+}
+
 class LinkerLifecycle : public initquit
 {
 public:
@@ -35,7 +46,7 @@ public:
     unsigned get_flags() override
     {
         return flag_on_playback_new_track | flag_on_playback_time | flag_on_playback_stop | flag_on_playback_pause |
-               flag_on_playback_seek;
+               flag_on_playback_seek | flag_on_volume_change;
     }
 
     void on_playback_new_track(metadb_handle_ptr track) override
@@ -123,7 +134,8 @@ public:
 
     void on_volume_change(float newValue) override
     {
-        (void)newValue;
+        if (isSpotifyVirtualTrack(m_lastSpotifyUri))
+            m_client.setVolume(foobarVolumeDbToPercent(newValue));
     }
 
 private:
