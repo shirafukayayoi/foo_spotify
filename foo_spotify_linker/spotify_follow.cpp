@@ -12,6 +12,8 @@ std::chrono::steady_clock::time_point g_suppressUntil{};
 std::mutex g_workerMutex;
 std::thread g_workerThread;
 bool g_workerStop = false;
+std::mutex g_followStateMutex;
+bool g_followPrimed = false;
 std::string g_lastFollowedUri;
 std::set<std::string> g_seenQueueUris;
 
@@ -100,12 +102,46 @@ private:
 
 std::vector<std::string> firstUnseenQueueUri(const std::vector<std::string> &uris)
 {
+    std::lock_guard<std::mutex> lock(g_followStateMutex);
     for (const std::string &uri : uris)
     {
         if (g_seenQueueUris.insert(uri).second)
             return {uri};
     }
     return {};
+}
+
+bool primeFollowState(const std::optional<SpotifyPlaybackInfo> &playback, const std::vector<std::string> &queueUris)
+{
+    std::lock_guard<std::mutex> lock(g_followStateMutex);
+    if (g_followPrimed)
+        return false;
+
+    if (playback && !playback->trackUri.empty())
+    {
+        g_lastFollowedUri = playback->trackUri;
+        g_seenQueueUris.insert(playback->trackUri);
+    }
+    for (const auto &uri : queueUris)
+        g_seenQueueUris.insert(uri);
+    g_followPrimed = true;
+    return true;
+}
+
+bool markFollowedPlaybackUri(const std::string &uri)
+{
+    std::lock_guard<std::mutex> lock(g_followStateMutex);
+    g_seenQueueUris.insert(uri);
+    if (uri == g_lastFollowedUri)
+        return false;
+    g_lastFollowedUri = uri;
+    return true;
+}
+
+void resetFollowPrime()
+{
+    std::lock_guard<std::mutex> lock(g_followStateMutex);
+    g_followPrimed = false;
 }
 } // namespace
 
@@ -160,18 +196,27 @@ void startSpotifyFollowWorker()
             if (g_cfg_follow_spotify_playback.get())
             {
                 const auto playback = client.getCurrentPlayback();
-                if (playback && playback->isPlaying && !playback->trackUri.empty())
+                const auto queueSnapshot = client.getQueueTrackUris();
+                if (primeFollowState(playback, queueSnapshot))
                 {
-                    g_seenQueueUris.insert(playback->trackUri);
-                    if (playback->trackUri != g_lastFollowedUri)
-                    {
-                        g_lastFollowedUri = playback->trackUri;
-                        startFollowedSpotifyTrackInFoobar(playback->trackUri, static_cast<double>(playback->progressMs) / 1000.0);
-                    }
+                    const int requestedInterval = static_cast<int>(g_cfg_polling_interval_ms.get());
+                    const int interval = requestedInterval < 1000 ? 1000 : requestedInterval;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+                    continue;
                 }
 
-                const auto queueUris = firstUnseenQueueUri(client.getQueueTrackUris());
+                if (playback && playback->isPlaying && !playback->trackUri.empty())
+                {
+                    if (markFollowedPlaybackUri(playback->trackUri))
+                        startFollowedSpotifyTrackInFoobar(playback->trackUri, static_cast<double>(playback->progressMs) / 1000.0);
+                }
+
+                const auto queueUris = firstUnseenQueueUri(queueSnapshot);
                 addSpotifyQueueTracksInFoobar(queueUris);
+            }
+            else
+            {
+                resetFollowPrime();
             }
 
             const int requestedInterval = static_cast<int>(g_cfg_polling_interval_ms.get());
