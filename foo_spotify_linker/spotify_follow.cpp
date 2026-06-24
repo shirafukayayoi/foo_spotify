@@ -13,6 +13,7 @@ std::mutex g_workerMutex;
 std::thread g_workerThread;
 bool g_workerStop = false;
 std::string g_lastFollowedUri;
+std::set<std::string> g_seenQueueUris;
 
 class StartSpotifyTrackCallback : public main_thread_callback
 {
@@ -47,6 +48,41 @@ private:
     std::string m_uri;
     double m_positionSeconds = 0.0;
 };
+
+class AddSpotifyQueueItemsCallback : public main_thread_callback
+{
+public:
+    explicit AddSpotifyQueueItemsCallback(std::vector<std::string> uris) : m_uris(std::move(uris)) {}
+
+    void callback_run() override
+    {
+        if (m_uris.empty())
+            return;
+
+        auto playlists = static_api_ptr_t<playlist_manager>();
+        t_size insertAt = playlists->activeplaylist_get_item_count();
+        for (const std::string &uriText : m_uris)
+        {
+            const char *uri = uriText.c_str();
+            if (playlists->activeplaylist_insert_locations(insertAt, pfc::list_single_ref_t<const char *>(uri), false, core_api::get_main_window()))
+                ++insertAt;
+        }
+    }
+
+private:
+    std::vector<std::string> m_uris;
+};
+
+std::vector<std::string> unseenQueueUris(const std::vector<std::string> &uris)
+{
+    std::vector<std::string> out;
+    for (const std::string &uri : uris)
+    {
+        if (g_seenQueueUris.insert(uri).second)
+            out.push_back(uri);
+    }
+    return out;
+}
 } // namespace
 
 bool shouldSuppressVirtualSpotifyPlayback()
@@ -64,6 +100,12 @@ void suppressVirtualSpotifyPlaybackFor(std::chrono::milliseconds duration)
 void startFollowedSpotifyTrackInFoobar(const std::string &spotifyTrackUri, double positionSeconds)
 {
     main_thread_callback_manager::get()->add_callback(new service_impl_t<StartSpotifyTrackCallback>(spotifyTrackUri, positionSeconds));
+}
+
+void addSpotifyQueueTracksInFoobar(const std::vector<std::string> &spotifyTrackUris)
+{
+    if (!spotifyTrackUris.empty())
+        main_thread_callback_manager::get()->add_callback(new service_impl_t<AddSpotifyQueueItemsCallback>(spotifyTrackUris));
 }
 
 void startSpotifyFollowWorker()
@@ -88,12 +130,16 @@ void startSpotifyFollowWorker()
                 const auto playback = client.getCurrentPlayback();
                 if (playback && playback->isPlaying && !playback->trackUri.empty())
                 {
+                    g_seenQueueUris.insert(playback->trackUri);
                     if (playback->trackUri != g_lastFollowedUri)
                     {
                         g_lastFollowedUri = playback->trackUri;
                         startFollowedSpotifyTrackInFoobar(playback->trackUri, static_cast<double>(playback->progressMs) / 1000.0);
                     }
                 }
+
+                const auto queueUris = unseenQueueUris(client.getQueueTrackUris());
+                addSpotifyQueueTracksInFoobar(queueUris);
             }
 
             const int requestedInterval = static_cast<int>(g_cfg_polling_interval_ms.get());

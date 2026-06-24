@@ -22,6 +22,7 @@
 #include <cstring>
 #include <cmath>
 #include <random>
+#include <set>
 #include <mutex>
 #include <optional>
 #include <sstream>

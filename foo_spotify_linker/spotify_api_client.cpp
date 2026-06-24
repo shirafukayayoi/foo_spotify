@@ -74,6 +74,31 @@ std::optional<std::string> firstSpotifyUri(const std::string &json, const std::s
     return std::nullopt;
 }
 
+std::vector<std::string> spotifyUris(const std::string &json, const std::string &prefix)
+{
+    std::vector<std::string> values;
+    const std::string marker = "\"uri\"";
+    size_t pos = 0;
+    while ((pos = json.find(marker, pos)) != std::string::npos)
+    {
+        pos = json.find(':', pos + marker.size());
+        if (pos == std::string::npos)
+            break;
+        pos = json.find('"', pos + 1);
+        if (pos == std::string::npos)
+            break;
+        const size_t end = json.find('"', pos + 1);
+        if (end == std::string::npos)
+            break;
+
+        const std::string value = json.substr(pos + 1, end - pos - 1);
+        if (value.rfind(prefix, 0) == 0 && std::find(values.begin(), values.end(), value) == values.end())
+            values.push_back(value);
+        pos = end + 1;
+    }
+    return values;
+}
+
 std::optional<std::string> jsonStringValueAfter(const std::string &json, const std::string &anchor, const std::string &key)
 {
     const size_t anchorPos = anchor.empty() ? 0 : json.find(anchor);
@@ -305,5 +330,13 @@ std::optional<SpotifyPlaybackInfo> SpotifyApiClient::getCurrentPlayback()
     if (const auto playing = jsonBoolValueLocal(response->body, "is_playing"))
         info.isPlaying = *playing;
     return info;
+}
+
+std::vector<std::string> SpotifyApiClient::getQueueTrackUris()
+{
+    const auto response = callSpotifyGet(L"https://api.spotify.com/v1/me/player/queue");
+    if (!response || response->status < 200 || response->status >= 300)
+        return {};
+    return spotifyUris(response->body, "spotify:track:");
 }
 } // namespace fsl

@@ -37,5 +37,6 @@ public:
     std::optional<std::string> searchAlbum(const std::string &query);
     std::optional<SpotifyTrackInfo> getTrackInfo(const std::string &spotifyTrackUri);
     std::optional<SpotifyPlaybackInfo> getCurrentPlayback();
+    std::vector<std::string> getQueueTrackUris();
 };
 } // namespace fsl
