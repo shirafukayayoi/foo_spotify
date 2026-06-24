@@ -107,4 +107,36 @@ std::string makeAlbumSearchQuery(const TrackMetadata &metadata)
         stream << "album:\"" << metadata.album << "\"";
     return stream.str();
 }
+
+std::vector<std::string> makeTrackSearchQueries(const TrackMetadata &metadata)
+{
+    std::vector<std::string> queries;
+    const auto add = [&queries](const std::string &query) {
+        if (!query.empty() && std::find(queries.begin(), queries.end(), query) == queries.end())
+            queries.push_back(query);
+    };
+
+    add(makeSearchQuery(metadata));
+    if (!metadata.title.empty() && !metadata.album.empty())
+        add("track:\"" + metadata.title + "\" album:\"" + metadata.album + "\"");
+    if (!metadata.title.empty() && !metadata.artist.empty())
+        add("track:\"" + metadata.title + "\" artist:\"" + metadata.artist + "\"");
+    if (!metadata.title.empty())
+        add("track:\"" + metadata.title + "\"");
+    return queries;
+}
+
+std::vector<std::string> makeAlbumSearchQueries(const TrackMetadata &metadata)
+{
+    std::vector<std::string> queries;
+    const auto add = [&queries](const std::string &query) {
+        if (!query.empty() && std::find(queries.begin(), queries.end(), query) == queries.end())
+            queries.push_back(query);
+    };
+
+    add(makeAlbumSearchQuery(metadata));
+    if (!metadata.album.empty())
+        add("album:\"" + metadata.album + "\"");
+    return queries;
+}
 } // namespace fsl

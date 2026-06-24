@@ -68,8 +68,6 @@ bool isStrictTrackMatch(const TrackMetadata &local, const SpotifyTrackInfo &spot
 {
     if (!sameTextStrict(local.title, spotify.title))
         return false;
-    if (!sameTextStrict(local.artist, spotify.artist))
-        return false;
     if (!local.album.empty() && !sameTextStrict(local.album, spotify.album))
         return false;
     if (local.lengthSeconds > 0.0 && spotify.durationMs > 0)
@@ -78,7 +76,9 @@ bool isStrictTrackMatch(const TrackMetadata &local, const SpotifyTrackInfo &spot
         if (std::abs(local.lengthSeconds - spotifySeconds) > 3.0)
             return false;
     }
-    return true;
+    if (sameTextStrict(local.artist, spotify.artist))
+        return true;
+    return !local.album.empty() && sameTextStrict(local.album, spotify.album);
 }
 
 bool isSpotifyVirtualPath(const std::string &path)
@@ -270,7 +270,13 @@ void runLibraryAutoLink(std::vector<TrackMetadata> tracks)
                 continue;
             }
 
-            const auto uri = client.searchTrack(makeSearchQuery(metadata));
+            std::optional<std::string> uri;
+            for (const auto &query : makeTrackSearchQueries(metadata))
+            {
+                uri = client.searchTrack(query);
+                if (uri)
+                    break;
+            }
             if (!uri)
             {
                 ++stats.failed;

@@ -21,4 +21,6 @@ std::string makeLocalHash(const TrackMetadata &metadata);
 std::string makeAlbumId(const TrackMetadata &metadata);
 std::string makeSearchQuery(const TrackMetadata &metadata);
 std::string makeAlbumSearchQuery(const TrackMetadata &metadata);
+std::vector<std::string> makeTrackSearchQueries(const TrackMetadata &metadata);
+std::vector<std::string> makeAlbumSearchQueries(const TrackMetadata &metadata);
 } // namespace fsl

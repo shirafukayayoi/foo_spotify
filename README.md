@@ -103,6 +103,7 @@ Jam 招待リンク (`open.spotify.com/socialsession/...` や、その `spotify.
 foobar2000 起動直後の最初の polling では、Spotify の現在再生と queue を既読として記録するだけで、playlist への追加や再生開始は行いません。これにより、Spotify 側で Jam を開いたまま foobar2000 を起動しても、起動直後に大量追加されることを避けます。
 
 `Auto Link Library Tracks` は foobar2000 Media Library 内の曲をバックグラウンドで走査し、未登録の曲だけ Spotify track と自動連携します。曖昧な候補を避けるため、Spotify の検索結果を再取得し、タイトル、アーティスト、ローカル側にアルバム名がある場合はアルバム名、さらに曲の長さが一致した場合だけ登録します。長さは3秒以内の差だけ許容します。
+Spotify 側のアーティスト名が英字表記で、ローカルタグが日本語表記の場合に備えて、検索はアーティスト込みの条件から始め、見つからない場合は track + album や album 主体の条件へフォールバックします。Library 自動連携では、アーティスト名が一致しない場合でも、タイトル、アルバム、長さが一致した時だけ登録します。
 
 対応 URL 例:
 

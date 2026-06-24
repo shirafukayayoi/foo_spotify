@@ -260,7 +260,13 @@ public:
         if (index == cmd_auto_track_uri)
         {
             SpotifyApiClient client;
-            const auto uri = client.searchTrack(makeSearchQuery(metadata));
+            std::optional<std::string> uri;
+            for (const auto &query : makeTrackSearchQueries(metadata))
+            {
+                uri = client.searchTrack(query);
+                if (uri)
+                    break;
+            }
             if (!uri)
             {
                 popup_message::g_show("Spotify track を検索できませんでした。", "Spotify Linker");
@@ -284,7 +290,13 @@ public:
         if (index == cmd_auto_album_uri)
         {
             SpotifyApiClient client;
-            const auto uri = client.searchAlbum(makeAlbumSearchQuery(metadata));
+            std::optional<std::string> uri;
+            for (const auto &query : makeAlbumSearchQueries(metadata))
+            {
+                uri = client.searchAlbum(query);
+                if (uri)
+                    break;
+            }
             if (!uri)
             {
                 popup_message::g_show("Spotify album を検索できませんでした。", "Spotify Linker");
