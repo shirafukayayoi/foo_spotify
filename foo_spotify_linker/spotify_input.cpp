@@ -28,7 +28,9 @@ int foobarVolumePercent()
     float volumeDb = 0.0f;
     try
     {
-        volumeDb = static_api_ptr_t<play_control>()->get_volume();
+        fb2k::inMainThreadSynchronous2([&volumeDb] {
+            volumeDb = static_api_ptr_t<play_control>()->get_volume();
+        });
     }
     catch (...)
     {
