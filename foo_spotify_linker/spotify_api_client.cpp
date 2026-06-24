@@ -316,6 +316,34 @@ std::optional<std::string> spotifyTrackAlbumName(const std::string &json)
     return jsonStringValueInRange(json, "name", range->first, range->second);
 }
 
+std::optional<std::string> spotifyTrackAlbumImageUrl(const std::string &json)
+{
+    const auto albumRange = jsonTopLevelValueRange(json, "album");
+    if (!albumRange)
+        return std::nullopt;
+
+    const std::string imagesMarker = "\"images\"";
+    size_t imagesPos = json.find(imagesMarker, albumRange->first);
+    if (imagesPos == std::string::npos || imagesPos >= albumRange->second)
+        return std::nullopt;
+
+    size_t colon = json.find(':', imagesPos + imagesMarker.size());
+    if (colon == std::string::npos || colon >= albumRange->second)
+        return std::nullopt;
+
+    size_t valueBegin = colon + 1;
+    while (valueBegin < albumRange->second && std::isspace(static_cast<unsigned char>(json[valueBegin])))
+        ++valueBegin;
+    if (valueBegin >= albumRange->second || json[valueBegin] != '[')
+        return std::nullopt;
+
+    const size_t imagesEnd = jsonValueEnd(json, valueBegin);
+    if (imagesEnd == std::string::npos || imagesEnd > albumRange->second)
+        return std::nullopt;
+
+    return jsonStringValueInRange(json, "url", valueBegin, imagesEnd);
+}
+
 std::optional<int> jsonIntValueLocal(const std::string &json, const std::string &key)
 {
     const std::string marker = "\"" + key + "\"";
@@ -511,6 +539,8 @@ std::optional<SpotifyTrackInfo> SpotifyApiClient::getTrackInfo(const std::string
         info.artist = *artist;
     if (const auto album = spotifyTrackAlbumName(response->body))
         info.album = *album;
+    if (const auto imageUrl = spotifyTrackAlbumImageUrl(response->body))
+        info.albumImageUrl = *imageUrl;
     if (const auto duration = jsonIntValueLocal(response->body, "duration_ms"))
         info.durationMs = *duration;
     return info;

@@ -14,6 +14,7 @@ struct SpotifyTrackInfo
     std::string title;
     std::string artist;
     std::string album;
+    std::string albumImageUrl;
     int durationMs = 0;
 };
 
