@@ -123,15 +123,28 @@ std::optional<SpotifyLink> parseSpotifyLink(std::string input)
     return std::nullopt;
 }
 
-void addLocations(const std::vector<std::string> &uris, bool select)
+void addLocationsToNewPlaylist(const std::vector<std::string> &uris, const char *playlistName, bool select)
 {
     auto playlists = static_api_ptr_t<playlist_manager>();
-    t_size insertAt = playlists->activeplaylist_get_item_count();
+    const t_size playlist = playlists->create_playlist(playlistName, SIZE_MAX, SIZE_MAX);
+    if (playlist == SIZE_MAX)
+    {
+        popup_message::g_show("新しい playlist を作成できませんでした。", "Spotify Linker");
+        return;
+    }
+
+    playlists->set_active_playlist(playlist);
+    t_size insertAt = 0;
     for (const auto &text : uris)
     {
         const char *uri = text.c_str();
-        if (playlists->activeplaylist_insert_locations(insertAt, pfc::list_single_ref_t<const char *>(uri), select, core_api::get_main_window()))
+        if (playlists->playlist_insert_locations(playlist, insertAt, pfc::list_single_ref_t<const char *>(uri), select, core_api::get_main_window()))
             ++insertAt;
+    }
+    if (insertAt > 0)
+    {
+        playlists->playlist_set_focus_item(playlist, 0);
+        playlists->playlist_ensure_visible(playlist, 0);
     }
 }
 
@@ -220,7 +233,7 @@ public:
                 popup_message::g_show("Spotify playlist の曲を取得できませんでした。再ログインが必要な場合があります。", "Spotify Linker");
                 return;
             }
-            addLocations(tracks, false);
+            addLocationsToNewPlaylist(tracks, "Spotify Playlist", false);
             popup_message::g_show(("Playlist から " + std::to_string(tracks.size()) + " 曲を追加しました。").c_str(), "Spotify Linker");
             return;
         }
@@ -241,12 +254,12 @@ public:
                 popup_message::g_show("Jam の中身は Spotify Web API から直接取得できません。Jam に参加して再生中にしてから、もう一度追加してください。", "Spotify Linker");
                 return;
             }
-            addLocations(tracks, false);
+            addLocationsToNewPlaylist(tracks, "Spotify Jam", false);
             popup_message::g_show(("Jam の現在再生と queue から " + std::to_string(tracks.size()) + " 曲を追加しました。新しく追加される曲は Follow Spotify playback を有効にすると追従します。").c_str(), "Spotify Linker");
             return;
         }
 
-        addLocations({parsed->uri}, true);
+        addLocationsToNewPlaylist({parsed->uri}, parsed->kind == SpotifyLinkKind::album ? "Spotify Album" : "Spotify Track", true);
     }
 };
 
