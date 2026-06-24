@@ -18,6 +18,8 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <random>
 #include <mutex>
 #include <optional>

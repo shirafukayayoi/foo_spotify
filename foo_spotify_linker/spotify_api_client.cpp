@@ -73,6 +73,56 @@ std::optional<std::string> firstSpotifyUri(const std::string &json, const std::s
     }
     return std::nullopt;
 }
+
+std::optional<std::string> jsonStringValueAfter(const std::string &json, const std::string &anchor, const std::string &key)
+{
+    const size_t anchorPos = anchor.empty() ? 0 : json.find(anchor);
+    if (anchorPos == std::string::npos)
+        return std::nullopt;
+
+    const std::string marker = "\"" + key + "\"";
+    size_t pos = json.find(marker, anchorPos);
+    if (pos == std::string::npos)
+        return std::nullopt;
+    pos = json.find(':', pos + marker.size());
+    if (pos == std::string::npos)
+        return std::nullopt;
+    pos = json.find('"', pos + 1);
+    if (pos == std::string::npos)
+        return std::nullopt;
+    const size_t end = json.find('"', pos + 1);
+    if (end == std::string::npos)
+        return std::nullopt;
+    return json.substr(pos + 1, end - pos - 1);
+}
+
+std::optional<int> jsonIntValueLocal(const std::string &json, const std::string &key)
+{
+    const std::string marker = "\"" + key + "\"";
+    size_t pos = json.find(marker);
+    if (pos == std::string::npos)
+        return std::nullopt;
+    pos = json.find(':', pos + marker.size());
+    if (pos == std::string::npos)
+        return std::nullopt;
+    ++pos;
+    while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos])))
+        ++pos;
+    size_t end = pos;
+    while (end < json.size() && std::isdigit(static_cast<unsigned char>(json[end])))
+        ++end;
+    if (end == pos)
+        return std::nullopt;
+    return std::atoi(json.substr(pos, end - pos).c_str());
+}
+
+std::optional<std::string> trackIdFromUri(const std::string &spotifyTrackUri)
+{
+    const std::string prefix = "spotify:track:";
+    if (spotifyTrackUri.rfind(prefix, 0) != 0 || spotifyTrackUri.size() <= prefix.size())
+        return std::nullopt;
+    return spotifyTrackUri.substr(prefix.size());
+}
 } // namespace
 
 SpotifyResult SpotifyApiClient::play(const std::string &spotifyUri, double positionSeconds)
@@ -175,5 +225,29 @@ std::optional<std::string> SpotifyApiClient::searchAlbum(const std::string &quer
     if (!response || response->status < 200 || response->status >= 300)
         return std::nullopt;
     return firstSpotifyUri(response->body, "spotify:album:");
+}
+
+std::optional<SpotifyTrackInfo> SpotifyApiClient::getTrackInfo(const std::string &spotifyTrackUri)
+{
+    const auto id = trackIdFromUri(spotifyTrackUri);
+    if (!id)
+        return std::nullopt;
+
+    const std::wstring url = L"https://api.spotify.com/v1/tracks/" + std::wstring(id->begin(), id->end());
+    const auto response = callSpotifyGet(url);
+    if (!response || response->status < 200 || response->status >= 300)
+        return std::nullopt;
+
+    SpotifyTrackInfo info;
+    info.uri = spotifyTrackUri;
+    if (const auto title = jsonStringValueAfter(response->body, "", "name"))
+        info.title = *title;
+    if (const auto artist = jsonStringValueAfter(response->body, "\"artists\"", "name"))
+        info.artist = *artist;
+    if (const auto album = jsonStringValueAfter(response->body, "\"album\"", "name"))
+        info.album = *album;
+    if (const auto duration = jsonIntValueLocal(response->body, "duration_ms"))
+        info.durationMs = *duration;
+    return info;
 }
 } // namespace fsl

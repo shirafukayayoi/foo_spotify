@@ -8,6 +8,11 @@ namespace fsl
 {
 namespace
 {
+bool isSpotifyVirtualTrack(const std::string &path)
+{
+    return path.rfind("spotify:track:", 0) == 0;
+}
+
 class LinkerLifecycle : public initquit
 {
 public:
@@ -29,12 +34,19 @@ class PlaybackSync : public play_callback_static
 public:
     unsigned get_flags() override
     {
-        return flag_on_playback_new_track | flag_on_playback_time | flag_on_playback_stop | flag_on_playback_pause;
+        return flag_on_playback_new_track | flag_on_playback_time | flag_on_playback_stop | flag_on_playback_pause |
+               flag_on_playback_seek;
     }
 
     void on_playback_new_track(metadb_handle_ptr track) override
     {
         const TrackMetadata metadata = readTrackMetadata(track);
+        if (isSpotifyVirtualTrack(metadata.path))
+        {
+            m_lastSpotifyUri = metadata.path;
+            return;
+        }
+
         const auto uri = MappingManager::instance().resolve(metadata);
         if (!uri)
         {
