@@ -1,0 +1,30 @@
+# Build output
+_result/
+build/
+out/
+bin/
+obj/
+x64/
+x86/
+Debug/
+Release/
+*.dll
+*.pdb
+*.lib
+*.exp
+*.fb2k-component
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.VC.db
+*.VC.VC.opendb
+
+# vcpkg
+vcpkg_installed/
+
+# Local secrets
+.env
+*.token
+*.secret
