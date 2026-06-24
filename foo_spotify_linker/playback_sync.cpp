@@ -14,6 +14,23 @@ bool isSpotifyVirtualTrack(const std::string &path)
     return path.rfind("spotify:track:", 0) == 0;
 }
 
+bool findPlayingPlaylistItem(t_size &playlist, t_size &item)
+{
+    auto playlists = static_api_ptr_t<playlist_manager>();
+    return playlists->get_playing_item_location(&playlist, &item);
+}
+
+bool isSpotifyManagedPlaylist(t_size playlist)
+{
+    pfc::string8 name;
+    if (!static_api_ptr_t<playlist_manager>()->playlist_get_name(playlist, name))
+        return false;
+    return std::strcmp(name.c_str(), "Spotify Playlist") == 0 ||
+           std::strcmp(name.c_str(), "Spotify Jam") == 0 ||
+           std::strcmp(name.c_str(), "Spotify Album") == 0 ||
+           std::strcmp(name.c_str(), "Spotify Track") == 0;
+}
+
 int foobarVolumeDbToPercent(float volumeDb)
 {
     if (volumeDb <= play_control::volume_mute)
@@ -55,6 +72,11 @@ public:
     void on_playback_new_track(metadb_handle_ptr track) override
     {
         const TrackMetadata metadata = readTrackMetadata(track);
+        m_lastPlayedPlaylist = SIZE_MAX;
+        m_lastPlayedItem = SIZE_MAX;
+        m_lastPlayedPath = metadata.path;
+        findPlayingPlaylistItem(m_lastPlayedPlaylist, m_lastPlayedItem);
+
         if (isSpotifyVirtualTrack(metadata.path))
         {
             m_lastSpotifyUri = metadata.path;
@@ -81,8 +103,13 @@ public:
     {
         if (reason == play_control::stop_reason_starting_another)
             return;
+        if (reason == play_control::stop_reason_eof)
+            removeFinishedManagedPlaylistItem();
         m_client.pause();
         m_lastSpotifyUri.clear();
+        m_lastPlayedPlaylist = SIZE_MAX;
+        m_lastPlayedItem = SIZE_MAX;
+        m_lastPlayedPath.clear();
     }
 
     void on_playback_pause(bool state) override
@@ -142,8 +169,28 @@ public:
     }
 
 private:
+    void removeFinishedManagedPlaylistItem()
+    {
+        if (m_lastPlayedPlaylist == SIZE_MAX || m_lastPlayedItem == SIZE_MAX || m_lastPlayedPath.empty())
+            return;
+        if (!isSpotifyManagedPlaylist(m_lastPlayedPlaylist))
+            return;
+
+        auto playlists = static_api_ptr_t<playlist_manager>();
+        metadb_handle_ptr handle;
+        if (!playlists->playlist_get_item_handle(handle, m_lastPlayedPlaylist, m_lastPlayedItem))
+            return;
+        if (std::strcmp(handle->get_path(), m_lastPlayedPath.c_str()) != 0)
+            return;
+
+        playlists->playlist_remove_items(m_lastPlayedPlaylist, pfc::bit_array_one(m_lastPlayedItem));
+    }
+
     SpotifyApiClient m_client;
     std::string m_lastSpotifyUri;
+    t_size m_lastPlayedPlaylist = SIZE_MAX;
+    t_size m_lastPlayedItem = SIZE_MAX;
+    std::string m_lastPlayedPath;
     std::chrono::steady_clock::time_point m_lastSeekCheck{};
 };
 
