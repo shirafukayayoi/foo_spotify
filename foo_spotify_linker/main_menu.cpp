@@ -1,5 +1,7 @@
 #include "stdafx.h"
 #include "http_client.h"
+#include "mapping_manager.h"
+#include "metadata.h"
 #include "resource.h"
 #include "spotify_api_client.h"
 
@@ -9,6 +11,7 @@ namespace
 {
 static constexpr GUID guid_mainmenu_group_spotify = {0xf7c54c3f, 0x8bc2, 0x4ca2, {0x91, 0xac, 0x0e, 0x8f, 0xd6, 0xf5, 0x46, 0x42}};
 static constexpr GUID guid_mainmenu_add_link = {0xc2f2cf2a, 0x33fb, 0x43b5, {0x94, 0xcb, 0x25, 0xcd, 0x64, 0x8a, 0x0e, 0x55}};
+static constexpr GUID guid_mainmenu_autolink_library = {0x32af6437, 0x3bfd, 0x46d6, {0x95, 0xda, 0xc4, 0xf8, 0x8d, 0xcd, 0x31, 0x66}};
 
 enum class SpotifyLinkKind
 {
@@ -23,6 +26,65 @@ struct SpotifyLink
     SpotifyLinkKind kind = SpotifyLinkKind::track;
     std::string uri;
 };
+
+struct LibraryAutoLinkStats
+{
+    size_t total = 0;
+    size_t registered = 0;
+    size_t alreadyMapped = 0;
+    size_t skipped = 0;
+    size_t failed = 0;
+};
+
+std::string normalizedText(const std::string &value)
+{
+    std::string out;
+    bool pendingSpace = false;
+    for (unsigned char ch : value)
+    {
+        if (std::isspace(ch))
+        {
+            pendingSpace = !out.empty();
+            continue;
+        }
+        if (pendingSpace)
+        {
+            out.push_back(' ');
+            pendingSpace = false;
+        }
+        out.push_back(static_cast<char>(std::tolower(ch)));
+    }
+    if (!out.empty() && out.back() == ' ')
+        out.pop_back();
+    return out;
+}
+
+bool sameTextStrict(const std::string &left, const std::string &right)
+{
+    return !left.empty() && normalizedText(left) == normalizedText(right);
+}
+
+bool isStrictTrackMatch(const TrackMetadata &local, const SpotifyTrackInfo &spotify)
+{
+    if (!sameTextStrict(local.title, spotify.title))
+        return false;
+    if (!sameTextStrict(local.artist, spotify.artist))
+        return false;
+    if (!local.album.empty() && !sameTextStrict(local.album, spotify.album))
+        return false;
+    if (local.lengthSeconds > 0.0 && spotify.durationMs > 0)
+    {
+        const double spotifySeconds = static_cast<double>(spotify.durationMs) / 1000.0;
+        if (std::abs(local.lengthSeconds - spotifySeconds) > 3.0)
+            return false;
+    }
+    return true;
+}
+
+bool isSpotifyVirtualPath(const std::string &path)
+{
+    return path.rfind("spotify:track:", 0) == 0;
+}
 
 std::string trimLink(std::string input)
 {
@@ -174,6 +236,90 @@ void addLocationsToNewPlaylist(const std::vector<std::string> &uris, const char 
     addLocationsToPlaylist(uris, playlistName, select, false);
 }
 
+void showLibraryAutoLinkComplete(LibraryAutoLinkStats stats)
+{
+    pfc::string8 message;
+    message << "Library 自動連携が完了しました。\n"
+            << "対象: " << stats.total << "\n"
+            << "登録: " << stats.registered << "\n"
+            << "登録済み: " << stats.alreadyMapped << "\n"
+            << "曖昧/不一致でスキップ: " << stats.skipped << "\n"
+            << "検索失敗: " << stats.failed;
+    popup_message::g_show(message.c_str(), "Spotify Linker");
+}
+
+void runLibraryAutoLink(std::vector<TrackMetadata> tracks)
+{
+    std::thread([tracks = std::move(tracks)]() mutable {
+        LibraryAutoLinkStats stats;
+        stats.total = tracks.size();
+
+        SpotifyApiClient client;
+        for (const auto &metadata : tracks)
+        {
+            if (metadata.title.empty() || metadata.artist.empty() || isSpotifyVirtualPath(metadata.path))
+            {
+                ++stats.skipped;
+                continue;
+            }
+
+            const std::string localHash = makeLocalHash(metadata);
+            if (MappingManager::instance().getTrackMapping(localHash))
+            {
+                ++stats.alreadyMapped;
+                continue;
+            }
+
+            const auto uri = client.searchTrack(makeSearchQuery(metadata));
+            if (!uri)
+            {
+                ++stats.failed;
+                continue;
+            }
+
+            const auto spotifyInfo = client.getTrackInfo(*uri);
+            if (!spotifyInfo || !isStrictTrackMatch(metadata, *spotifyInfo))
+            {
+                ++stats.skipped;
+                continue;
+            }
+
+            if (MappingManager::instance().addTrackMapping(localHash, *uri))
+                ++stats.registered;
+            else
+                ++stats.failed;
+        }
+
+        fb2k::inMainThread([stats] { showLibraryAutoLinkComplete(stats); });
+    }).detach();
+}
+
+void startLibraryAutoLink()
+{
+    auto library = library_manager::get();
+    if (!library->is_library_enabled())
+    {
+        popup_message::g_show("Media Library が有効ではありません。foobar2000 の Library 設定を確認してください。", "Spotify Linker");
+        return;
+    }
+
+    metadb_handle_list handles;
+    library->get_all_items(handles);
+    if (handles.get_count() == 0)
+    {
+        popup_message::g_show("Media Library に曲がありません。", "Spotify Linker");
+        return;
+    }
+
+    std::vector<TrackMetadata> tracks;
+    tracks.reserve(handles.get_count());
+    for (t_size index = 0; index < handles.get_count(); ++index)
+        tracks.push_back(readTrackMetadata(handles.get_item(index)));
+
+    popup_message::g_show(("Library の " + std::to_string(tracks.size()) + " 曲をバックグラウンドでSpotify自動連携します。曖昧な候補は登録しません。").c_str(), "Spotify Linker");
+    runLibraryAutoLink(std::move(tracks));
+}
+
 class AddSpotifyLinkDialog : public CDialogImpl<AddSpotifyLinkDialog>
 {
 public:
@@ -212,24 +358,52 @@ private:
 class SpotifyMainMenu : public mainmenu_commands
 {
 public:
+    enum Command
+    {
+        cmd_add_link,
+        cmd_autolink_library,
+        cmd_count
+    };
+
     t_uint32 get_command_count() override
     {
-        return 1;
+        return cmd_count;
     }
 
-    GUID get_command(t_uint32) override
+    GUID get_command(t_uint32 index) override
     {
-        return guid_mainmenu_add_link;
+        switch (index)
+        {
+        case cmd_add_link:
+            return guid_mainmenu_add_link;
+        case cmd_autolink_library:
+            return guid_mainmenu_autolink_library;
+        default:
+            uBugCheck();
+        }
     }
 
-    void get_name(t_uint32, pfc::string_base &out) override
+    void get_name(t_uint32 index, pfc::string_base &out) override
     {
-        out = "Add Spotify Link...";
+        switch (index)
+        {
+        case cmd_add_link:
+            out = "Add Spotify Link...";
+            return;
+        case cmd_autolink_library:
+            out = "Auto Link Library Tracks";
+            return;
+        default:
+            uBugCheck();
+        }
     }
 
-    bool get_description(t_uint32, pfc::string_base &out) override
+    bool get_description(t_uint32 index, pfc::string_base &out) override
     {
-        out = "Spotify track / album / playlist URL を foobar2000 playlist に追加します。";
+        if (index == cmd_autolink_library)
+            out = "Media Library 内の曲を厳格一致したSpotify trackへ自動登録します。";
+        else
+            out = "Spotify track / album / playlist URL を foobar2000 playlist に追加します。";
         return true;
     }
 
@@ -238,8 +412,14 @@ public:
         return guid_mainmenu_group_spotify;
     }
 
-    void execute(t_uint32, ctx_t) override
+    void execute(t_uint32 index, ctx_t) override
     {
+        if (index == cmd_autolink_library)
+        {
+            startLibraryAutoLink();
+            return;
+        }
+
         AddSpotifyLinkDialog dialog;
         if (dialog.DoModal(core_api::get_main_window()) != IDOK)
             return;

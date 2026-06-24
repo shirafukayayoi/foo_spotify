@@ -52,6 +52,7 @@ vcpkg install sqlite3 nlohmann-json curl openssl fmt
 - 右クリックメニュー `Spotify Linker` からの Spotify track / album URI 手動登録、自動登録、削除
 - Spotify URL の正規化 (`https://open.spotify.com/intl-ja/track/...` などのロケール付き URL を含む)
 - `File > Add > Spotify Linker > Add Spotify Link...` からの Spotify track / album / playlist / Jam リンク追加
+- `File > Add > Spotify Linker > Auto Link Library Tracks` からの Media Library 一括自動連携
 - Spotify playlist URL / URI の track 仮想トラック展開
 - `https://spotify.link/...` / `https://spotify.app.link/...` 短縮リンクの展開
 - アルバム単位マッピング時のトラック番号オフセット再生
@@ -100,6 +101,8 @@ Jam 招待リンク (`open.spotify.com/socialsession/...` や、その `spotify.
 
 `Follow Spotify playback in foobar2000` を有効にすると、Spotify 側で現在再生中の track を polling し、foobar2000 側でも `spotify:track:...` 仮想トラックとして再生開始します。あわせて Spotify の queue 先頭に見える次曲を active playlist へ1曲ずつ追加します。Jam 専用 API は Spotify Web API にないため、Jam か通常再生かは判定せず「自分の Spotify アカウントの現在再生」と「自分の Spotify queue」を追従します。
 foobar2000 起動直後の最初の polling では、Spotify の現在再生と queue を既読として記録するだけで、playlist への追加や再生開始は行いません。これにより、Spotify 側で Jam を開いたまま foobar2000 を起動しても、起動直後に大量追加されることを避けます。
+
+`Auto Link Library Tracks` は foobar2000 Media Library 内の曲をバックグラウンドで走査し、未登録の曲だけ Spotify track と自動連携します。曖昧な候補を避けるため、Spotify の検索結果を再取得し、タイトル、アーティスト、ローカル側にアルバム名がある場合はアルバム名、さらに曲の長さが一致した場合だけ登録します。長さは3秒以内の差だけ許容します。
 
 対応 URL 例:
 
