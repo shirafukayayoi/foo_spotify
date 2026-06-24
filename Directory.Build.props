@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup>
+    <PreferredToolArchitecture>x64</PreferredToolArchitecture>
+    <IncludePath>$(MSBuildThisFileDirectory)third_party\wtl\Include;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+</Project>

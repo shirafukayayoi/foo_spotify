@@ -40,7 +40,33 @@ vcpkg install sqlite3 nlohmann-json curl openssl fmt
 
 ## 状態
 
-現在は技術仕様の公開段階です。実装、ビルドスクリプト、CI は今後追加予定です。
+現在は MVP 実装段階です。以下は実装済みです。
+
+- foobar2000 component としてロード可能な DLL のビルド
+- `Preferences > Tools > Spotify Linker` の基本設定画面
+- SQLite による `track_map` / `album_map` / `config` テーブル作成
+- 右クリックメニューからの Spotify track URI 手動登録、削除
+- 再生開始、停止、pause、seek イベントの検知
+- `.fb2k-component` パッケージ作成
+
+未実装です。
+
+- Spotify OAuth PKCE ログイン
+- Spotify Web API の実通信
+- 自動検索
+- D&D 登録 UI
+- アルバム単位マッピング UI
+
+## ビルド
+
+```powershell
+.\build.ps1 -Config Release -Platform x64
+```
+
+成果物:
+
+- `foo_spotify_linker\_result\x64_Release\bin\foo_spotify_linker.dll`
+- `foo_spotify_linker\_result\foo_spotify_linker.fb2k-component`
 
 ## License
 
