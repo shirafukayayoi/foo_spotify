@@ -35,6 +35,7 @@ public:
     SpotifyResult seek(double positionSeconds);
     SpotifyResult setVolume(int volumePercent);
     std::optional<std::string> searchTrack(const std::string &query);
+    std::vector<std::string> searchTracks(const std::string &query, int limit);
     std::optional<std::string> searchAlbum(const std::string &query);
     std::optional<SpotifyTrackInfo> getTrackInfo(const std::string &spotifyTrackUri);
     std::optional<SpotifyPlaybackInfo> getCurrentPlayback();

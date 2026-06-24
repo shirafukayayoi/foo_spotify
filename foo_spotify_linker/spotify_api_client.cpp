@@ -500,13 +500,25 @@ SpotifyResult SpotifyApiClient::setVolume(int volumePercent)
 
 std::optional<std::string> SpotifyApiClient::searchTrack(const std::string &query)
 {
+    const auto tracks = searchTracks(query, 1);
+    if (tracks.empty())
+        return std::nullopt;
+    return tracks.front();
+}
+
+std::vector<std::string> SpotifyApiClient::searchTracks(const std::string &query, int limit)
+{
     const std::string encoded = urlEncode(query);
-    const std::wstring url = L"https://api.spotify.com/v1/search?type=track&limit=1&q=" +
+    if (limit < 1)
+        limit = 1;
+    if (limit > 10)
+        limit = 10;
+    const std::wstring url = L"https://api.spotify.com/v1/search?type=track&limit=" + std::to_wstring(limit) + L"&q=" +
                              std::wstring(encoded.begin(), encoded.end());
     const auto response = callSpotifyGet(url);
     if (!response || response->status < 200 || response->status >= 300)
-        return std::nullopt;
-    return firstSpotifyUri(response->body, "spotify:track:");
+        return {};
+    return spotifyUris(response->body, "spotify:track:");
 }
 
 std::optional<std::string> SpotifyApiClient::searchAlbum(const std::string &query)

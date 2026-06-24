@@ -34,6 +34,7 @@ struct LibraryAutoLinkStats
     size_t alreadyMapped = 0;
     size_t skipped = 0;
     size_t failed = 0;
+    size_t candidatesRejected = 0;
 };
 
 std::string normalizedText(const std::string &value)
@@ -244,6 +245,7 @@ void showLibraryAutoLinkComplete(LibraryAutoLinkStats stats)
             << "登録: " << stats.registered << "\n"
             << "登録済み: " << stats.alreadyMapped << "\n"
             << "曖昧/不一致でスキップ: " << stats.skipped << "\n"
+            << "候補不一致: " << stats.candidatesRejected << "\n"
             << "検索失敗: " << stats.failed;
     popup_message::g_show(message.c_str(), "Spotify Linker");
 }
@@ -270,27 +272,45 @@ void runLibraryAutoLink(std::vector<TrackMetadata> tracks)
                 continue;
             }
 
-            std::optional<std::string> uri;
+            std::optional<std::string> matchedUri;
+            bool hadCandidates = false;
             for (const auto &query : makeTrackSearchQueries(metadata))
             {
-                uri = client.searchTrack(query);
-                if (uri)
+                const auto uris = client.searchTracks(query, 5);
+                if (!uris.empty())
+                    hadCandidates = true;
+
+                for (const auto &uri : uris)
+                {
+                    const auto spotifyInfo = client.getTrackInfo(uri);
+                    if (spotifyInfo && isStrictTrackMatch(metadata, *spotifyInfo))
+                    {
+                        matchedUri = uri;
+                        break;
+                    }
+                    ++stats.candidatesRejected;
+                }
+                if (matchedUri)
                     break;
             }
-            if (!uri)
+            if (!matchedUri)
             {
-                ++stats.failed;
+                if (hadCandidates)
+                {
+                    ++stats.skipped;
+                    FB2K_console_formatter() << "foo_spotify_linker: Library auto link skipped: "
+                                             << metadata.artist.c_str() << " - " << metadata.title.c_str();
+                }
+                else
+                {
+                    ++stats.failed;
+                    FB2K_console_formatter() << "foo_spotify_linker: Library auto link search failed: "
+                                             << metadata.artist.c_str() << " - " << metadata.title.c_str();
+                }
                 continue;
             }
 
-            const auto spotifyInfo = client.getTrackInfo(*uri);
-            if (!spotifyInfo || !isStrictTrackMatch(metadata, *spotifyInfo))
-            {
-                ++stats.skipped;
-                continue;
-            }
-
-            if (MappingManager::instance().addTrackMapping(localHash, *uri))
+            if (MappingManager::instance().addTrackMapping(localHash, *matchedUri))
                 ++stats.registered;
             else
                 ++stats.failed;
