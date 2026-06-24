@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include "auth_manager.h"
 #include "resource.h"
 #include "settings.h"
 
@@ -69,6 +70,8 @@ public:
     COMMAND_HANDLER_EX(IDC_EDIT_POLLING_INTERVAL, EN_CHANGE, onAnyChange)
     COMMAND_HANDLER_EX(IDC_CHECK_MUTE_ON_SYNC, BN_CLICKED, onAnyChange)
     COMMAND_HANDLER_EX(IDC_BTN_BROWSE_DB, BN_CLICKED, onBrowseDb)
+    COMMAND_HANDLER_EX(IDC_BTN_LOGIN, BN_CLICKED, onLogin)
+    COMMAND_HANDLER_EX(IDC_BTN_CLEAR_TOKEN, BN_CLICKED, onClearToken)
     END_MSG_MAP()
 
 private:
@@ -83,7 +86,7 @@ private:
         SetDlgItemText(IDC_EDIT_POLLING_INTERVAL, buf);
         CheckDlgButton(IDC_CHECK_MUTE_ON_SYNC, g_cfg_mute_on_sync.get() ? BST_CHECKED : BST_UNCHECKED);
 
-        SetDlgItemText(IDC_STATIC_STATUS, L"OAuth と Web API 接続は次段階で実装します。");
+        SetDlgItemText(IDC_STATIC_STATUS, statusText().c_str());
         return FALSE;
     }
 
@@ -104,6 +107,25 @@ private:
         ofn.Flags = OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST;
         if (GetSaveFileName(&ofn))
             SetDlgItemText(IDC_EDIT_DB_PATH, buf);
+        onChanged();
+    }
+
+    void onLogin(UINT, int, CWindow)
+    {
+        apply();
+        SetDlgItemText(IDC_STATIC_STATUS, L"ブラウザで Spotify login を完了してください...");
+        std::string message;
+        const bool ok = AuthManager::instance().beginLogin(message);
+        SetDlgItemText(IDC_STATIC_STATUS, pfc::stringcvt::string_os_from_utf8(message.c_str()));
+        if (!ok)
+            popup_message::g_show(message.c_str(), "Spotify Linker");
+        onChanged();
+    }
+
+    void onClearToken(UINT, int, CWindow)
+    {
+        AuthManager::instance().clearTokens();
+        SetDlgItemText(IDC_STATIC_STATUS, statusText().c_str());
         onChanged();
     }
 
@@ -135,6 +157,14 @@ private:
     void onChanged()
     {
         m_callback->on_state_changed();
+    }
+
+    std::wstring statusText() const
+    {
+        pfc::string8 refresh = g_cfg_refresh_token.get();
+        if (refresh.is_empty())
+            return L"Redirect URI: http://127.0.0.1:8088/callback / 未ログイン";
+        return L"Redirect URI: http://127.0.0.1:8088/callback / token 保存済み";
     }
 
     preferences_page_callback::ptr m_callback;

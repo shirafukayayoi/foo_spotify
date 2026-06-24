@@ -44,6 +44,10 @@ vcpkg install sqlite3 nlohmann-json curl openssl fmt
 
 - foobar2000 component としてロード可能な DLL のビルド
 - `Preferences > Tools > Spotify Linker` の基本設定画面
+- Spotify OAuth PKCE login
+- OAuth access token / refresh token の foobar2000 config 保存
+- Redirect URI `http://127.0.0.1:8088/callback`
+- Spotify Web API による再生、pause、seek、音量制御
 - SQLite による `track_map` / `album_map` / `config` テーブル作成
 - 右クリックメニューからの Spotify track URI 手動登録、削除
 - 再生開始、停止、pause、seek イベントの検知
@@ -51,11 +55,24 @@ vcpkg install sqlite3 nlohmann-json curl openssl fmt
 
 未実装です。
 
-- Spotify OAuth PKCE ログイン
-- Spotify Web API の実通信
 - 自動検索
 - D&D 登録 UI
 - アルバム単位マッピング UI
+
+## Spotify Developer App 設定
+
+Spotify Developer Dashboard 側で Redirect URI に以下を登録してください。
+
+```text
+http://127.0.0.1:8088/callback
+```
+
+プラグイン側では `Preferences > Tools > Spotify Linker` に Spotify App の Client ID を入力し、`Login Spotify` を押します。
+
+要求 scope:
+
+- `user-modify-playback-state`
+- `user-read-playback-state`
 
 ## ビルド
 
