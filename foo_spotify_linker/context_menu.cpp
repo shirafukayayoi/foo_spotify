@@ -7,10 +7,19 @@ namespace fsl
 {
 namespace
 {
+static constexpr GUID guid_context_group_spotify = {0xa1fbfe4d, 0x2a5b, 0x4d84, {0x9f, 0xaa, 0x8b, 0x56, 0x21, 0xe9, 0x22, 0x77}};
 static constexpr GUID guid_context_set_uri = {0x4b8ad6bc, 0xd71d, 0x4115, {0x90, 0xa7, 0x09, 0x51, 0x7c, 0xdd, 0x43, 0x08}};
 static constexpr GUID guid_context_remove_uri = {0x7898af35, 0xa9ca, 0x4675, {0x89, 0x95, 0x56, 0xd5, 0x2a, 0x58, 0x75, 0xdf}};
+static constexpr GUID guid_context_set_album_uri = {0x6a0814c9, 0xd18b, 0x4d29, {0x8c, 0x7c, 0x64, 0x1f, 0xdb, 0xa3, 0x37, 0x41}};
+static constexpr GUID guid_context_remove_album_uri = {0x51edbc36, 0x594f, 0x43c8, {0xb9, 0xc0, 0x86, 0x7d, 0x11, 0x53, 0x0d, 0x98}};
 
-bool normalizeSpotifyUri(std::string input, std::string &out)
+enum class SpotifyUriKind
+{
+    track,
+    album
+};
+
+bool normalizeSpotifyUri(std::string input, SpotifyUriKind kind, std::string &out)
 {
     input.erase(std::remove_if(input.begin(), input.end(), [](unsigned char ch) { return ch == '\r' || ch == '\n' || ch == '\t'; }), input.end());
     while (!input.empty() && std::isspace(static_cast<unsigned char>(input.front())))
@@ -18,20 +27,27 @@ bool normalizeSpotifyUri(std::string input, std::string &out)
     while (!input.empty() && std::isspace(static_cast<unsigned char>(input.back())))
         input.pop_back();
 
-    const std::string uriPrefix = "spotify:track:";
+    const std::string uriPrefix = kind == SpotifyUriKind::track ? "spotify:track:" : "spotify:album:";
     if (input.rfind(uriPrefix, 0) == 0 && input.size() > uriPrefix.size())
     {
         out = input;
         return true;
     }
 
-    const std::string urlPrefix = "https://open.spotify.com/track/";
-    if (input.rfind(urlPrefix, 0) == 0)
+    const std::string typeSegment = kind == SpotifyUriKind::track ? "/track/" : "/album/";
+    const std::string host = "https://open.spotify.com/";
+    if (input.rfind(host, 0) == 0)
     {
-        std::string id = input.substr(urlPrefix.size());
+        const size_t typePos = input.find(typeSegment, host.size());
+        if (typePos == std::string::npos)
+            return false;
+        std::string id = input.substr(typePos + typeSegment.size());
         const size_t query = id.find('?');
         if (query != std::string::npos)
             id.resize(query);
+        const size_t slash = id.find('/');
+        if (slash != std::string::npos)
+            id.resize(slash);
         if (!id.empty())
         {
             out = uriPrefix + id;
@@ -50,7 +66,7 @@ public:
         IDD = IDD_URI_DIALOG
     };
 
-    explicit UriDialog(const TrackMetadata &metadata) : m_metadata(metadata) {}
+    UriDialog(const TrackMetadata &metadata, SpotifyUriKind kind) : m_metadata(metadata), m_kind(kind) {}
 
     std::string uri() const
     {
@@ -66,7 +82,11 @@ public:
 private:
     BOOL onInitDialog(CWindow, LPARAM)
     {
-        std::string label = m_metadata.artist + " - " + m_metadata.title;
+        std::string label;
+        if (m_kind == SpotifyUriKind::album)
+            label = "Album: " + (m_metadata.albumArtist.empty() ? m_metadata.artist : m_metadata.albumArtist) + " - " + m_metadata.album;
+        else
+            label = m_metadata.artist + " - " + m_metadata.title;
         if (label == " - ")
             label = m_metadata.path;
         SetDlgItemText(IDC_STATIC_TRACK, pfc::stringcvt::string_os_from_utf8(label.c_str()));
@@ -78,9 +98,9 @@ private:
         CString value;
         GetDlgItemText(IDC_EDIT_SPOTIFY_URI, value);
         std::string normalized;
-        if (!normalizeSpotifyUri(pfc::stringcvt::string_utf8_from_os(value).get_ptr(), normalized))
+        if (!normalizeSpotifyUri(pfc::stringcvt::string_utf8_from_os(value).get_ptr(), m_kind, normalized))
         {
-            popup_message::g_show("Spotify URI または open.spotify.com の track URL を入力してください。", "Spotify Linker");
+            popup_message::g_show("Spotify URI または open.spotify.com の URL を入力してください。", "Spotify Linker");
             return;
         }
         m_uri = normalized;
@@ -93,6 +113,7 @@ private:
     }
 
     TrackMetadata m_metadata;
+    SpotifyUriKind m_kind;
     std::string m_uri;
 };
 
@@ -103,6 +124,8 @@ public:
     {
         cmd_set_uri = 0,
         cmd_remove_uri,
+        cmd_set_album_uri,
+        cmd_remove_album_uri,
         cmd_count
     };
 
@@ -116,10 +139,16 @@ public:
         switch (index)
         {
         case cmd_set_uri:
-            out = "Set Spotify URI...";
+            out = "Set Track URI...";
             return;
         case cmd_remove_uri:
-            out = "Remove Spotify URI";
+            out = "Remove Track URI";
+            return;
+        case cmd_set_album_uri:
+            out = "Set Album URI...";
+            return;
+        case cmd_remove_album_uri:
+            out = "Remove Album URI";
             return;
         default:
             uBugCheck();
@@ -136,6 +165,12 @@ public:
         case cmd_remove_uri:
             out = "選択トラックの Spotify URI マッピングを削除します。";
             return true;
+        case cmd_set_album_uri:
+            out = "選択トラックのアルバムへ Spotify album URI を手動マッピングします。";
+            return true;
+        case cmd_remove_album_uri:
+            out = "選択トラックのアルバム単位 Spotify URI マッピングを削除します。";
+            return true;
         default:
             return false;
         }
@@ -149,6 +184,10 @@ public:
             return guid_context_set_uri;
         case cmd_remove_uri:
             return guid_context_remove_uri;
+        case cmd_set_album_uri:
+            return guid_context_set_album_uri;
+        case cmd_remove_album_uri:
+            return guid_context_remove_album_uri;
         default:
             uBugCheck();
         }
@@ -156,7 +195,7 @@ public:
 
     GUID get_parent() override
     {
-        return contextmenu_groups::root;
+        return guid_context_group_spotify;
     }
 
     void context_command(unsigned index, metadb_handle_list_cref data, const GUID &) override
@@ -171,11 +210,20 @@ public:
             MappingManager::instance().removeTrackMapping(localHash);
             return;
         }
+        if (index == cmd_remove_album_uri)
+        {
+            MappingManager::instance().removeAlbumMapping(makeAlbumId(metadata));
+            return;
+        }
 
-        UriDialog dialog(metadata);
+        const bool albumMode = index == cmd_set_album_uri;
+        UriDialog dialog(metadata, albumMode ? SpotifyUriKind::album : SpotifyUriKind::track);
         if (dialog.DoModal(core_api::get_main_window()) == IDOK)
         {
-            MappingManager::instance().addTrackMapping(localHash, dialog.uri());
+            if (albumMode)
+                MappingManager::instance().addAlbumMapping(makeAlbumId(metadata), dialog.uri());
+            else
+                MappingManager::instance().addTrackMapping(localHash, dialog.uri());
         }
     }
 
@@ -187,6 +235,7 @@ public:
     }
 };
 
+contextmenu_group_popup_factory g_contextGroup(guid_context_group_spotify, contextmenu_groups::root, "Spotify Linker", -10);
 contextmenu_item_factory_t<SpotifyContextMenu> g_contextMenu;
 } // namespace
 } // namespace fsl

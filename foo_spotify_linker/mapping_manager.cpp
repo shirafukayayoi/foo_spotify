@@ -93,6 +93,22 @@ std::optional<std::string> MappingManager::resolve(const TrackMetadata &metadata
             result = reinterpret_cast<const char *>(text);
     }
     sqlite3_finalize(stmt);
+    if (result)
+        return result;
+
+    const std::string albumId = makeAlbumId(metadata);
+    stmt = nullptr;
+    if (sqlite3_prepare_v2(m_db, "SELECT spotify_album_uri FROM album_map WHERE album_id = ?", -1, &stmt, nullptr) != SQLITE_OK)
+        return std::nullopt;
+
+    sqlite3_bind_text(stmt, 1, albumId.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) == SQLITE_ROW)
+    {
+        const unsigned char *text = sqlite3_column_text(stmt, 0);
+        if (text)
+            result = reinterpret_cast<const char *>(text);
+    }
+    sqlite3_finalize(stmt);
     return result;
 }
 
@@ -127,6 +143,42 @@ bool MappingManager::removeTrackMapping(const std::string &localHash)
     if (sqlite3_prepare_v2(m_db, "DELETE FROM track_map WHERE local_hash = ?", -1, &stmt, nullptr) != SQLITE_OK)
         return false;
     sqlite3_bind_text(stmt, 1, localHash.c_str(), -1, SQLITE_TRANSIENT);
+    const bool ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+bool MappingManager::addAlbumMapping(const std::string &albumId, const std::string &spotifyUri)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!m_db)
+        return false;
+
+    sqlite3_stmt *stmt = nullptr;
+    const char *sql =
+        "INSERT INTO album_map(album_id, spotify_album_uri, updated_at) VALUES(?, ?, ?) "
+        "ON CONFLICT(album_id) DO UPDATE SET spotify_album_uri = excluded.spotify_album_uri, updated_at = excluded.updated_at";
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK)
+        return false;
+
+    sqlite3_bind_text(stmt, 1, albumId.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, spotifyUri.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, 3, nowMs());
+    const bool ok = sqlite3_step(stmt) == SQLITE_DONE;
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+bool MappingManager::removeAlbumMapping(const std::string &albumId)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (!m_db)
+        return false;
+
+    sqlite3_stmt *stmt = nullptr;
+    if (sqlite3_prepare_v2(m_db, "DELETE FROM album_map WHERE album_id = ?", -1, &stmt, nullptr) != SQLITE_OK)
+        return false;
+    sqlite3_bind_text(stmt, 1, albumId.c_str(), -1, SQLITE_TRANSIENT);
     const bool ok = sqlite3_step(stmt) == SQLITE_DONE;
     sqlite3_finalize(stmt);
     return ok;

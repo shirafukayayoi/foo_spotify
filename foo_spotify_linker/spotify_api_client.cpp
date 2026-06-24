@@ -50,7 +50,16 @@ SpotifyResult SpotifyApiClient::play(const std::string &spotifyUri, double posit
     if (g_cfg_mute_on_sync.get())
         setVolume(0);
 
-    const std::string body = "{\"uris\":[\"" + spotifyUri + "\"],\"position_ms\":" + std::to_string(posMs) + "}";
+    std::string body;
+    const std::string albumPrefix = "spotify:album:";
+    if (spotifyUri.rfind(albumPrefix, 0) == 0)
+    {
+        body = "{\"context_uri\":\"" + spotifyUri + "\",\"position_ms\":" + std::to_string(posMs) + "}";
+    }
+    else
+    {
+        body = "{\"uris\":[\"" + spotifyUri + "\"],\"position_ms\":" + std::to_string(posMs) + "}";
+    }
     const SpotifyResult result = callPlayerApi(L"PUT", url, body, true);
     if (!result.ok)
         FB2K_console_formatter() << "foo_spotify_linker: Spotify play failed: " << result.message.c_str();

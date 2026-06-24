@@ -49,7 +49,8 @@ vcpkg install sqlite3 nlohmann-json curl openssl fmt
 - Redirect URI `http://127.0.0.1:8088/callback`
 - Spotify Web API による再生、pause、seek、音量制御
 - SQLite による `track_map` / `album_map` / `config` テーブル作成
-- 右クリックメニューからの Spotify track URI 手動登録、削除
+- 右クリックメニュー `Spotify Linker` からの Spotify track / album URI 手動登録、削除
+- Spotify URL の正規化 (`https://open.spotify.com/intl-ja/track/...` などのロケール付き URL を含む)
 - 再生開始、停止、pause、seek イベントの検知
 - `.fb2k-component` パッケージ作成
 
@@ -57,7 +58,23 @@ vcpkg install sqlite3 nlohmann-json curl openssl fmt
 
 - 自動検索
 - D&D 登録 UI
-- アルバム単位マッピング UI
+## 手動マッピング
+
+foobar2000 上でトラックを右クリックし、`Spotify Linker` メニューから登録します。
+
+- `Set Track URI...`: 選択トラック単位で Spotify track URI / URL を登録
+- `Remove Track URI`: 選択トラック単位の登録を削除
+- `Set Album URI...`: 選択トラックのアルバム単位で Spotify album URI / URL を登録
+- `Remove Album URI`: 選択トラックのアルバム単位の登録を削除
+
+対応 URL 例:
+
+```text
+https://open.spotify.com/intl-ja/track/2VU59VkXEBNX4ZZf7SmGAy?si=0d0b3e910e1e486b
+https://open.spotify.com/track/2VU59VkXEBNX4ZZf7SmGAy
+spotify:track:2VU59VkXEBNX4ZZf7SmGAy
+spotify:album:...
+```
 
 ## Spotify Developer App 設定
 
