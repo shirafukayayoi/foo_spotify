@@ -33,6 +33,44 @@ SpotifyResult callPlayerApi(const wchar_t *method, const std::wstring &url, cons
     return {false, "Spotify Web API error HTTP " + std::to_string(response->status) + ": " + response->body};
 }
 
+std::string narrowAsciiUrl(const std::wstring &url)
+{
+    std::string out;
+    out.reserve(url.size());
+    for (const auto ch : url)
+        out.push_back(ch >= 0 && ch <= 0x7f ? static_cast<char>(ch) : '?');
+    return out;
+}
+
+std::string truncateForConsole(const std::string &value)
+{
+    constexpr size_t maxLength = 800;
+    if (value.size() <= maxLength)
+        return value;
+    return value.substr(0, maxLength) + "...";
+}
+
+bool shouldLogSpotifyApiIssue(const std::string &key)
+{
+    static std::mutex mutex;
+    static std::map<std::string, std::chrono::steady_clock::time_point> lastLog;
+    constexpr auto interval = std::chrono::seconds(15);
+
+    const auto now = std::chrono::steady_clock::now();
+    std::lock_guard<std::mutex> lock(mutex);
+    const auto it = lastLog.find(key);
+    if (it != lastLog.end() && now - it->second < interval)
+        return false;
+    lastLog[key] = now;
+    return true;
+}
+
+void logSpotifyApiIssue(const std::string &key, const std::string &message)
+{
+    if (shouldLogSpotifyApiIssue(key))
+        FB2K_console_formatter() << "foo_spotify_linker: " << message.c_str();
+}
+
 std::optional<HttpResponse> callSpotifyGet(const std::wstring &url)
 {
     std::string token;
@@ -42,7 +80,21 @@ std::optional<HttpResponse> callSpotifyGet(const std::wstring &url)
         FB2K_console_formatter() << "foo_spotify_linker: Spotify token error: " << message.c_str();
         return std::nullopt;
     }
-    return httpRequest(L"GET", url, bearerHeaders(token, false), "");
+    const auto response = httpRequest(L"GET", url, bearerHeaders(token, false), "");
+    const auto urlText = narrowAsciiUrl(url);
+    if (!response)
+    {
+        logSpotifyApiIssue("GET:no-response:" + urlText,
+                           "Spotify GET failed: no response url=" + urlText);
+        return std::nullopt;
+    }
+    if (response->status != 204 && (response->status < 200 || response->status >= 300))
+    {
+        logSpotifyApiIssue("GET:" + std::to_string(response->status) + ":" + urlText,
+                           "Spotify GET failed: HTTP " + std::to_string(response->status) +
+                               " url=" + urlText + " body=" + truncateForConsole(response->body));
+    }
+    return response;
 }
 
 std::wstring playbackUrl(const std::wstring &pathAndQuery)
@@ -607,7 +659,12 @@ std::optional<SpotifyPlaybackInfo> SpotifyApiClient::getCurrentPlayback()
 
     const auto uri = firstSpotifyUri(response->body, "spotify:track:");
     if (!uri)
+    {
+        logSpotifyApiIssue("GET:current-playback:no-track-uri",
+                           "Spotify current playback response did not contain a spotify:track URI. body=" +
+                               truncateForConsole(response->body));
         return std::nullopt;
+    }
 
     SpotifyPlaybackInfo info;
     info.trackUri = *uri;
