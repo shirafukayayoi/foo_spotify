@@ -390,6 +390,8 @@ std::vector<std::string> getCurrentAndNextSpotifyTrackUris()
             break;
         }
     }
+    if (tracks.size() > 2)
+        tracks.resize(2);
     return tracks;
 }
 
@@ -552,6 +554,19 @@ public:
             }
             addLocationsToPlaylist(tracks, "Spotify Playlist", false, true);
             popup_message::g_show(("Spotify Playlist に現在再生と次の曲から " + std::to_string(tracks.size()) + " 曲を追加しました。以後は Follow Spotify playback で1曲ずつ補充します。").c_str(), "Spotify Linker");
+            return;
+        }
+
+        if (parsed->kind == SpotifyLinkKind::album)
+        {
+            const auto tracks = SpotifyApiClient().getAlbumTrackUris(parsed->uri);
+            if (tracks.empty())
+            {
+                popup_message::g_show("Album URL から track URL を取得できませんでした。", "Spotify Linker");
+                return;
+            }
+            addLocationsToNewPlaylist(tracks, "Spotify Album", true);
+            popup_message::g_show(("Spotify Album に album 内の track URL を " + std::to_string(tracks.size()) + " 曲追加しました。").c_str(), "Spotify Linker");
             return;
         }
 

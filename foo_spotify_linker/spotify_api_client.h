@@ -44,6 +44,7 @@ public:
     std::optional<std::string> searchAlbum(const std::string &query);
     std::optional<SpotifyTrackInfo> getTrackInfo(const std::string &spotifyTrackUri);
     std::optional<std::string> getAlbumTrackUri(const std::string &spotifyAlbumUri, int zeroBasedOffset);
+    std::vector<std::string> getAlbumTrackUris(const std::string &spotifyAlbumUri);
     std::optional<SpotifyPlaybackInfo> getCurrentPlayback();
     std::vector<std::string> getQueueTrackUris();
     std::vector<std::string> getPlaylistTrackUris(const std::string &spotifyPlaylistUri);

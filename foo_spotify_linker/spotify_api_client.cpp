@@ -352,6 +352,14 @@ std::optional<std::string> jsonTopLevelStringValue(const std::string &json, cons
     return jsonDecodeQuotedRange(json, range->first, range->second);
 }
 
+std::vector<std::string> spotifyUrisInTopLevelRange(const std::string &json, const std::string &key, const std::string &prefix)
+{
+    const auto range = jsonTopLevelValueRange(json, key);
+    if (!range)
+        return {};
+    return spotifyUris(json.substr(range->first, range->second - range->first), prefix);
+}
+
 std::optional<std::string> spotifyTrackArtistName(const std::string &json)
 {
     const auto range = jsonTopLevelValueRange(json, "artists");
@@ -651,6 +659,35 @@ std::optional<std::string> SpotifyApiClient::getAlbumTrackUri(const std::string 
     return uris[localIndex];
 }
 
+std::vector<std::string> SpotifyApiClient::getAlbumTrackUris(const std::string &spotifyAlbumUri)
+{
+    const auto id = albumIdFromUri(spotifyAlbumUri);
+    if (!id)
+        return {};
+
+    std::vector<std::string> out;
+    for (int offset = 0; offset < 1000; offset += 50)
+    {
+        const std::wstring url = L"https://api.spotify.com/v1/albums/" + std::wstring(id->begin(), id->end()) +
+                                 L"/tracks?limit=50&offset=" + std::to_wstring(offset);
+        const auto response = callSpotifyGet(url);
+        if (!response || response->status < 200 || response->status >= 300)
+            break;
+
+        const auto uris = spotifyUris(response->body, "spotify:track:");
+        for (const auto &uri : uris)
+        {
+            if (std::find(out.begin(), out.end(), uri) == out.end())
+                out.push_back(uri);
+        }
+
+        const auto nextUrl = jsonStringValue(response->body, "next");
+        if (!nextUrl || nextUrl->empty() || *nextUrl == "null")
+            break;
+    }
+    return out;
+}
+
 std::optional<SpotifyPlaybackInfo> SpotifyApiClient::getCurrentPlayback()
 {
     const auto response = callSpotifyGet(L"https://api.spotify.com/v1/me/player");
@@ -689,7 +726,7 @@ std::vector<std::string> SpotifyApiClient::getQueueTrackUris()
     const auto response = callSpotifyGet(L"https://api.spotify.com/v1/me/player/queue");
     if (!response || response->status < 200 || response->status >= 300)
         return {};
-    return spotifyUris(response->body, "spotify:track:");
+    return spotifyUrisInTopLevelRange(response->body, "queue", "spotify:track:");
 }
 
 std::vector<std::string> SpotifyApiClient::getPlaylistTrackUris(const std::string &spotifyPlaylistUri)
