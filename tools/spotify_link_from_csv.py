@@ -137,13 +137,24 @@ def build_queries(track: LocalTrack) -> list[str]:
     return queries
 
 
-def spotify_search(access_token: str, query: str, limit: int) -> list[dict]:
+def spotify_search(access_token: str, query: str, limit: int, max_retry_after: int) -> list[dict]:
     url = "https://api.spotify.com/v1/search?" + urllib.parse.urlencode(
         {"type": "track", "limit": str(limit), "q": query}
     )
     request = urllib.request.Request(url, headers={"Authorization": f"Bearer {access_token}"})
-    with urllib.request.urlopen(request, timeout=20) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    while True:
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                retry_after = int(exc.headers.get("Retry-After", "5") or "5")
+                if retry_after > max_retry_after:
+                    raise RuntimeError(f"Spotify rate limited: retry_after={retry_after}s")
+                time.sleep(max(1, retry_after))
+                continue
+            raise
     return list((payload.get("tracks") or {}).get("items") or [])
 
 
@@ -153,12 +164,13 @@ def find_best_candidate(
     limit: int,
     min_score: int,
     duration_tolerance: float,
+    max_retry_after: int,
 ) -> SpotifyCandidate | None:
     best: SpotifyCandidate | None = None
     seen: set[str] = set()
     for query in build_queries(track):
         try:
-            items = spotify_search(access_token, query, limit)
+            items = spotify_search(access_token, query, limit, max_retry_after)
         except Exception as exc:
             print(f"search failed: {track.artist} - {track.title}: {exc}", file=sys.stderr)
             continue
@@ -237,6 +249,11 @@ def upsert_mapping(connection: sqlite3.Connection, local_hash: str, spotify_uri:
     )
 
 
+def has_mapping(connection: sqlite3.Connection, local_hash: str) -> bool:
+    row = connection.execute("SELECT 1 FROM track_map WHERE local_hash = ? LIMIT 1", (local_hash,)).fetchone()
+    return row is not None
+
+
 def write_review_header(path: Path) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.writer(handle)
@@ -285,6 +302,8 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=5, help="Spotify検索候補数。")
     parser.add_argument("--min-score", type=int, default=75, help="自動登録する最低スコア。")
     parser.add_argument("--duration-tolerance", type=float, default=3.0, help="曲長一致の許容秒数。")
+    parser.add_argument("--skip-existing", action="store_true", help="既にtrack_mapへ登録済みの行をスキップします。")
+    parser.add_argument("--max-retry-after", type=int, default=300, help="Spotify 429 Retry-Afterがこの秒数を超えたら中断します。")
     args = parser.parse_args()
 
     if args.review_csv:
@@ -292,15 +311,28 @@ def main() -> int:
 
     registered = 0
     skipped = 0
+    existing = 0
     searched = 0
     connection = sqlite3.connect(args.db)
     try:
         ensure_schema(connection)
         for track, csv_uri in read_tracks(args.csv):
+            local_hash = make_local_hash(track)
+            if args.skip_existing and has_mapping(connection, local_hash):
+                existing += 1
+                continue
+
             spotify_uri = csv_uri
             candidate: SpotifyCandidate | None = None
             if not spotify_uri and args.spotify_token:
-                candidate = find_best_candidate(track, args.spotify_token, args.limit, args.min_score, args.duration_tolerance)
+                candidate = find_best_candidate(
+                    track,
+                    args.spotify_token,
+                    args.limit,
+                    args.min_score,
+                    args.duration_tolerance,
+                    args.max_retry_after,
+                )
                 if candidate:
                     spotify_uri = candidate.uri
                 searched += 1
@@ -311,7 +343,6 @@ def main() -> int:
             if not spotify_uri:
                 skipped += 1
                 continue
-            local_hash = make_local_hash(track)
             if args.dry_run:
                 print(f"DRY {local_hash} -> {spotify_uri} / {track.artist} - {track.title}")
             else:
@@ -322,7 +353,7 @@ def main() -> int:
     finally:
         connection.close()
 
-    print(f"registered={registered} skipped={skipped} searched={searched} dry_run={args.dry_run}")
+    print(f"registered={registered} skipped={skipped} existing={existing} searched={searched} dry_run={args.dry_run}")
     return 0
 
 

@@ -26,3 +26,10 @@ python tools\spotify_link_from_csv.py --csv .\local_tracks.csv --db .\foo_spotif
 
 `local_hash` はプラグイン側の `makeLocalHash()` と同じ入力順で再現しています。
 
+ローカル音源フォルダから入力CSVを作る場合:
+
+```powershell
+python tools\export_local_music_csv.py --root D:\music --out .\local_tracks_d_music.csv
+```
+
+Spotify API が `429 Too Many Requests` を返した場合は、Spotifyの `Retry-After` が短ければ待機し、長すぎる場合は中断します。時間を置いて同じCSVで再実行できます。

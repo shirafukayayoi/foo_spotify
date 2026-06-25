@@ -38,3 +38,9 @@ vcpkg_installed/
 .env
 *.token
 *.secret
+
+# Local Spotify linking work files
+auto_link_review*.csv
+local_tracks*.csv
+tools/__pycache__/
+*.pyc
