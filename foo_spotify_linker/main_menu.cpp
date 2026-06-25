@@ -12,6 +12,7 @@ namespace
 static constexpr GUID guid_mainmenu_group_spotify = {0xf7c54c3f, 0x8bc2, 0x4ca2, {0x91, 0xac, 0x0e, 0x8f, 0xd6, 0xf5, 0x46, 0x42}};
 static constexpr GUID guid_mainmenu_add_link = {0xc2f2cf2a, 0x33fb, 0x43b5, {0x94, 0xcb, 0x25, 0xcd, 0x64, 0x8a, 0x0e, 0x55}};
 static constexpr GUID guid_mainmenu_autolink_library = {0x32af6437, 0x3bfd, 0x46d6, {0x95, 0xda, 0xc4, 0xf8, 0x8d, 0xcd, 0x31, 0x66}};
+static constexpr GUID guid_mainmenu_add_current_playback = {0x4ad9bbcb, 0xa89d, 0x4a6d, {0x9d, 0xda, 0x8f, 0x8b, 0xc6, 0x1a, 0x54, 0xd8}};
 
 enum class SpotifyLinkKind
 {
@@ -392,6 +393,18 @@ std::vector<std::string> getCurrentAndNextSpotifyTrackUris()
     return tracks;
 }
 
+void addCurrentSpotifyPlaybackToPlaylist()
+{
+    const auto tracks = getCurrentAndNextSpotifyTrackUris();
+    if (tracks.empty())
+    {
+        popup_message::g_show("Spotify 側で再生中の曲を取得できませんでした。Spotifyで曲を再生してから、もう一度実行してください。", "Spotify Linker");
+        return;
+    }
+    addLocationsToPlaylist(tracks, "Spotify Playlist", false, true);
+    popup_message::g_show(("Spotify Playlist に現在再生と次の曲から " + std::to_string(tracks.size()) + " 曲を追加しました。").c_str(), "Spotify Linker");
+}
+
 class AddSpotifyLinkDialog : public CDialogImpl<AddSpotifyLinkDialog>
 {
 public:
@@ -433,6 +446,7 @@ public:
     enum Command
     {
         cmd_add_link,
+        cmd_add_current_playback,
         cmd_autolink_library,
         cmd_count
     };
@@ -448,6 +462,8 @@ public:
         {
         case cmd_add_link:
             return guid_mainmenu_add_link;
+        case cmd_add_current_playback:
+            return guid_mainmenu_add_current_playback;
         case cmd_autolink_library:
             return guid_mainmenu_autolink_library;
         default:
@@ -462,6 +478,9 @@ public:
         case cmd_add_link:
             out = "Add Spotify Link...";
             return;
+        case cmd_add_current_playback:
+            out = "Add Current Spotify Playback";
+            return;
         case cmd_autolink_library:
             out = "Auto Link Library Tracks";
             return;
@@ -472,7 +491,9 @@ public:
 
     bool get_description(t_uint32 index, pfc::string_base &out) override
     {
-        if (index == cmd_autolink_library)
+        if (index == cmd_add_current_playback)
+            out = "Spotifyの現在再生中トラックとqueue先頭の次曲をSpotify Playlistへ追加します。";
+        else if (index == cmd_autolink_library)
             out = "Media Library 内の曲を厳格一致したSpotify trackへ自動登録します。";
         else
             out = "Spotify track / album / playlist URL を foobar2000 playlist に追加します。";
@@ -489,6 +510,11 @@ public:
         if (index == cmd_autolink_library)
         {
             startLibraryAutoLink();
+            return;
+        }
+        if (index == cmd_add_current_playback)
+        {
+            addCurrentSpotifyPlaybackToPlaylist();
             return;
         }
 
