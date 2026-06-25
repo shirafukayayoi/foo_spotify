@@ -281,7 +281,6 @@ void startSpotifyFollowWorker()
     g_workerStop = false;
     g_workerThread = std::thread([] {
         SpotifyApiClient client;
-        auto lastQueuePoll = std::chrono::steady_clock::time_point{};
         while (true)
         {
             {
@@ -293,17 +292,11 @@ void startSpotifyFollowWorker()
             if (g_cfg_follow_spotify_playback.get())
             {
                 const auto playback = client.getCurrentPlayback();
-                std::vector<std::string> queueSnapshot;
-                const auto now = std::chrono::steady_clock::now();
-                if (lastQueuePoll == std::chrono::steady_clock::time_point{} || now - lastQueuePoll >= std::chrono::seconds(15))
-                {
-                    queueSnapshot = client.getQueueTrackUris();
-                    lastQueuePoll = now;
-                }
+                const auto queueSnapshot = client.getQueueTrackUris();
                 if (primeFollowState(playback, queueSnapshot))
                 {
                     const int requestedInterval = static_cast<int>(g_cfg_polling_interval_ms.get());
-                    const int interval = requestedInterval < 3000 ? 3000 : requestedInterval;
+                    const int interval = requestedInterval < 1000 ? 1000 : requestedInterval;
                     std::this_thread::sleep_for(std::chrono::milliseconds(interval));
                     continue;
                 }
@@ -326,7 +319,7 @@ void startSpotifyFollowWorker()
             }
 
             const int requestedInterval = static_cast<int>(g_cfg_polling_interval_ms.get());
-            const int interval = requestedInterval < 3000 ? 3000 : requestedInterval;
+            const int interval = requestedInterval < 1000 ? 1000 : requestedInterval;
             std::this_thread::sleep_for(std::chrono::milliseconds(interval));
         }
     });

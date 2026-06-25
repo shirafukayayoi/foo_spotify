@@ -65,32 +65,6 @@ bool shouldLogSpotifyApiIssue(const std::string &key)
     return true;
 }
 
-std::mutex &spotifyGetBackoffMutex()
-{
-    static std::mutex mutex;
-    return mutex;
-}
-
-std::chrono::steady_clock::time_point &spotifyGetBackoffUntil()
-{
-    static std::chrono::steady_clock::time_point backoffUntil{};
-    return backoffUntil;
-}
-
-bool isSpotifyGetBackoffActive()
-{
-    std::lock_guard<std::mutex> lock(spotifyGetBackoffMutex());
-    return std::chrono::steady_clock::now() < spotifyGetBackoffUntil();
-}
-
-void activateSpotifyGetBackoff(std::chrono::seconds duration)
-{
-    std::lock_guard<std::mutex> lock(spotifyGetBackoffMutex());
-    const auto until = std::chrono::steady_clock::now() + duration;
-    if (until > spotifyGetBackoffUntil())
-        spotifyGetBackoffUntil() = until;
-}
-
 void logSpotifyApiIssue(const std::string &key, const std::string &message)
 {
     if (shouldLogSpotifyApiIssue(key))
@@ -99,14 +73,6 @@ void logSpotifyApiIssue(const std::string &key, const std::string &message)
 
 std::optional<HttpResponse> callSpotifyGet(const std::wstring &url)
 {
-    const auto urlText = narrowAsciiUrl(url);
-    if (isSpotifyGetBackoffActive())
-    {
-        logSpotifyApiIssue("GET:rate-limit-backoff",
-                           "Spotify GET skipped during rate limit backoff. url=" + urlText);
-        return std::nullopt;
-    }
-
     std::string token;
     std::string message;
     if (!AuthManager::instance().ensureAccessToken(token, message))
@@ -115,6 +81,7 @@ std::optional<HttpResponse> callSpotifyGet(const std::wstring &url)
         return std::nullopt;
     }
     const auto response = httpRequest(L"GET", url, bearerHeaders(token, false), "");
+    const auto urlText = narrowAsciiUrl(url);
     if (!response)
     {
         logSpotifyApiIssue("GET:no-response:" + urlText,
@@ -123,12 +90,9 @@ std::optional<HttpResponse> callSpotifyGet(const std::wstring &url)
     }
     if (response->status != 204 && (response->status < 200 || response->status >= 300))
     {
-        if (response->status == 429)
-            activateSpotifyGetBackoff(std::chrono::seconds(30));
         logSpotifyApiIssue("GET:" + std::to_string(response->status) + ":" + urlText,
                            "Spotify GET failed: HTTP " + std::to_string(response->status) +
-                               " url=" + urlText + " body=" + truncateForConsole(response->body) +
-                               (response->status == 429 ? " backing_off_seconds=30" : ""));
+                               " url=" + urlText + " body=" + truncateForConsole(response->body));
     }
     return response;
 }
