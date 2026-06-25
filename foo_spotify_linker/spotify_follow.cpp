@@ -9,6 +9,8 @@ namespace
 {
 std::mutex g_suppressMutex;
 std::chrono::steady_clock::time_point g_suppressUntil{};
+std::mutex g_managedRemovalMutex;
+bool g_suppressNextManagedRemoval = false;
 std::mutex g_workerMutex;
 std::thread g_workerThread;
 bool g_workerStop = false;
@@ -190,6 +192,20 @@ void suppressFollowedSpotifyTrack(const std::string &spotifyTrackUri, std::chron
     std::lock_guard<std::mutex> lock(g_followStateMutex);
     g_suppressedFollowUris[spotifyTrackUri] = std::chrono::steady_clock::now() + duration;
     g_seenQueueUris.insert(spotifyTrackUri);
+}
+
+void suppressNextManagedPlaylistRemoval()
+{
+    std::lock_guard<std::mutex> lock(g_managedRemovalMutex);
+    g_suppressNextManagedRemoval = true;
+}
+
+bool consumeSuppressNextManagedPlaylistRemoval()
+{
+    std::lock_guard<std::mutex> lock(g_managedRemovalMutex);
+    const bool suppressed = g_suppressNextManagedRemoval;
+    g_suppressNextManagedRemoval = false;
+    return suppressed;
 }
 
 void startFollowedSpotifyTrackInFoobar(const std::string &spotifyTrackUri, double positionSeconds)

@@ -46,6 +46,37 @@ int foobarVolumePercent()
     return pfc::clip_t<int>(static_cast<int>(std::lround(linear * 100.0)), 0, 100);
 }
 
+bool queueReplayCurrentPlaylistItem()
+{
+    t_size playlist = SIZE_MAX;
+    t_size item = SIZE_MAX;
+    try
+    {
+        fb2k::inMainThreadSynchronous2([&playlist, &item] {
+            auto playlists = static_api_ptr_t<playlist_manager>();
+            if (!playlists->get_playing_item_location(&playlist, &item))
+            {
+                playlist = SIZE_MAX;
+                item = SIZE_MAX;
+            }
+        });
+    }
+    catch (...)
+    {
+        return false;
+    }
+
+    if (playlist == SIZE_MAX || item == SIZE_MAX)
+        return false;
+
+    fb2k::inMainThread([playlist, item] {
+        auto playlists = static_api_ptr_t<playlist_manager>();
+        suppressVirtualSpotifyPlaybackFor(std::chrono::seconds(5));
+        playlists->playlist_execute_default_action(playlist, item);
+    });
+    return true;
+}
+
 class SpotifyTrackInput : public input_stubs
 {
 public:
@@ -100,6 +131,7 @@ public:
         m_position = 0.0;
         m_started = false;
         m_endGraceUntil = {};
+        m_replayRequested = false;
         if (flags & input_flag_playback)
             startSpotifyPlayback(0.0);
     }
@@ -109,7 +141,7 @@ public:
         abort.check();
         if (m_position >= m_length)
         {
-            if (!repeatIfSpotifyLooped(abort))
+            if (!waitForSpotifyLoopOrReplay(abort))
                 return false;
         }
 
@@ -133,6 +165,7 @@ public:
             seconds = m_length;
         m_position = seconds;
         m_endGraceUntil = {};
+        m_replayRequested = false;
         startSpotifyPlayback(seconds);
     }
 
@@ -197,10 +230,10 @@ private:
         m_started = result.ok;
     }
 
-    bool repeatIfSpotifyLooped(abort_callback &abort)
+    bool waitForSpotifyLoopOrReplay(abort_callback &abort)
     {
         abort.check();
-        if (m_uri.empty())
+        if (m_uri.empty() || m_replayRequested)
             return false;
 
         const auto now = std::chrono::steady_clock::now();
@@ -219,9 +252,11 @@ private:
 
         if (playback->progressMs >= 0 && playback->progressMs <= 5000)
         {
-            m_position = static_cast<double>(playback->progressMs) / 1000.0;
             m_endGraceUntil = {};
-            return true;
+            m_replayRequested = true;
+            if (queueReplayCurrentPlaylistItem())
+                suppressNextManagedPlaylistRemoval();
+            return false;
         }
 
         m_position = m_length > 0.25 ? m_length - 0.25 : 0.0;
@@ -233,6 +268,7 @@ private:
     double m_length = fallbackLengthSeconds;
     double m_position = 0.0;
     bool m_started = false;
+    bool m_replayRequested = false;
     std::chrono::steady_clock::time_point m_endGraceUntil{};
 };
 

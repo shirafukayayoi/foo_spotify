@@ -122,8 +122,10 @@ public:
                                   (reason == play_control::stop_reason_starting_another && m_lastPlaybackNearEnd);
         if (shouldRemove)
         {
-            const bool refillJam = isSpotifyJamPlaylist(m_lastPlayedPlaylist);
-            removeFinishedManagedPlaylistItem();
+            const bool suppressRemoval = consumeSuppressNextManagedPlaylistRemoval();
+            const bool refillJam = !suppressRemoval && isSpotifyJamPlaylist(m_lastPlayedPlaylist);
+            if (!suppressRemoval)
+                removeFinishedManagedPlaylistItem();
             if (refillJam)
                 requestNextSpotifyQueueTrackInFoobar();
         }
