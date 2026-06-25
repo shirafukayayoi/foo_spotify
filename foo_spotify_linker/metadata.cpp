@@ -48,6 +48,37 @@ std::string pseudoSha1(const std::string &text)
     std::snprintf(buf, sizeof(buf), "%08x%08x%08x%08x%08x", h1, h2, h3, h4, h5);
     return buf;
 }
+
+std::string trimAscii(std::string value)
+{
+    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())))
+        value.erase(value.begin());
+    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
+        value.pop_back();
+    return value;
+}
+
+std::string lowerAscii(std::string value)
+{
+    for (char &ch : value)
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    return value;
+}
+
+bool isDigits(const std::string &value)
+{
+    return !value.empty() && std::all_of(value.begin(), value.end(), [](unsigned char ch) { return std::isdigit(ch); });
+}
+
+std::vector<std::string> splitAsciiWords(const std::string &value)
+{
+    std::vector<std::string> words;
+    std::istringstream stream(value);
+    std::string word;
+    while (stream >> word)
+        words.push_back(word);
+    return words;
+}
 } // namespace
 
 TrackMetadata readTrackMetadata(const metadb_handle_ptr &track)
@@ -85,6 +116,43 @@ std::string makeAlbumId(const TrackMetadata &metadata)
     return pseudoSha1(albumArtist + "\n" + metadata.album + "\n" + metadata.date);
 }
 
+std::string cleanAlbumTitleForSpotify(const std::string &album)
+{
+    std::vector<std::string> words = splitAsciiWords(trimAscii(album));
+    while (!words.empty())
+    {
+        const std::string word = lowerAscii(words.back());
+        if (isDigits(word) && words.size() >= 2)
+        {
+            const std::string previous = lowerAscii(words[words.size() - 2]);
+            if (previous == "cd" || previous == "disc" || previous == "disk")
+            {
+                words.pop_back();
+                words.pop_back();
+                continue;
+            }
+        }
+        if ((word.size() > 1 && word[0] == '#' && isDigits(word.substr(1))) ||
+            (word.size() > 2 && word.rfind("cd", 0) == 0 && isDigits(word.substr(2))) ||
+            (word.size() > 4 && word.rfind("disc", 0) == 0 && isDigits(word.substr(4))) ||
+            word == "cd" || word == "disc" || word == "disk")
+        {
+            words.pop_back();
+            continue;
+        }
+        break;
+    }
+
+    std::ostringstream stream;
+    for (size_t i = 0; i < words.size(); ++i)
+    {
+        if (i > 0)
+            stream << ' ';
+        stream << words[i];
+    }
+    return stream.str();
+}
+
 std::string makeSearchQuery(const TrackMetadata &metadata)
 {
     std::ostringstream stream;
@@ -117,6 +185,13 @@ std::vector<std::string> makeTrackSearchQueries(const TrackMetadata &metadata)
     };
 
     add(makeSearchQuery(metadata));
+    const std::string cleanAlbum = cleanAlbumTitleForSpotify(metadata.album);
+    if (!metadata.title.empty() && !cleanAlbum.empty() && cleanAlbum != metadata.album)
+    {
+        if (!metadata.artist.empty())
+            add("artist:\"" + metadata.artist + "\" track:\"" + metadata.title + "\" album:\"" + cleanAlbum + "\"");
+        add("track:\"" + metadata.title + "\" album:\"" + cleanAlbum + "\"");
+    }
     if (!metadata.title.empty() && !metadata.album.empty())
         add("track:\"" + metadata.title + "\" album:\"" + metadata.album + "\"");
     if (!metadata.title.empty() && !metadata.artist.empty())
@@ -135,6 +210,9 @@ std::vector<std::string> makeAlbumSearchQueries(const TrackMetadata &metadata)
     };
 
     add(makeAlbumSearchQuery(metadata));
+    const std::string cleanAlbum = cleanAlbumTitleForSpotify(metadata.album);
+    if (!cleanAlbum.empty() && cleanAlbum != metadata.album)
+        add("album:\"" + cleanAlbum + "\"");
     if (!metadata.album.empty())
         add("album:\"" + metadata.album + "\"");
     return queries;

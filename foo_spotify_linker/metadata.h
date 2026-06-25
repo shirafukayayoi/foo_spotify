@@ -19,6 +19,7 @@ struct TrackMetadata
 TrackMetadata readTrackMetadata(const metadb_handle_ptr &track);
 std::string makeLocalHash(const TrackMetadata &metadata);
 std::string makeAlbumId(const TrackMetadata &metadata);
+std::string cleanAlbumTitleForSpotify(const std::string &album);
 std::string makeSearchQuery(const TrackMetadata &metadata);
 std::string makeAlbumSearchQuery(const TrackMetadata &metadata);
 std::vector<std::string> makeTrackSearchQueries(const TrackMetadata &metadata);

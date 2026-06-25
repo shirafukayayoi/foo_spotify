@@ -65,11 +65,24 @@ bool sameTextStrict(const std::string &left, const std::string &right)
     return !left.empty() && normalizedText(left) == normalizedText(right);
 }
 
+bool sameAlbumTextStrict(const std::string &left, const std::string &right)
+{
+    if (sameTextStrict(left, right))
+        return true;
+    const std::string cleanLeft = cleanAlbumTitleForSpotify(left);
+    const std::string cleanRight = cleanAlbumTitleForSpotify(right);
+    if (!cleanLeft.empty() && sameTextStrict(cleanLeft, right))
+        return true;
+    if (!cleanRight.empty() && sameTextStrict(left, cleanRight))
+        return true;
+    return !cleanLeft.empty() && !cleanRight.empty() && sameTextStrict(cleanLeft, cleanRight);
+}
+
 bool isStrictTrackMatch(const TrackMetadata &local, const SpotifyTrackInfo &spotify)
 {
     if (!sameTextStrict(local.title, spotify.title))
         return false;
-    if (!local.album.empty() && !sameTextStrict(local.album, spotify.album))
+    if (!local.album.empty() && !sameAlbumTextStrict(local.album, spotify.album))
         return false;
     if (local.lengthSeconds > 0.0 && spotify.durationMs > 0)
     {
@@ -79,7 +92,7 @@ bool isStrictTrackMatch(const TrackMetadata &local, const SpotifyTrackInfo &spot
     }
     if (sameTextStrict(local.artist, spotify.artist))
         return true;
-    return !local.album.empty() && sameTextStrict(local.album, spotify.album);
+    return !local.album.empty() && sameAlbumTextStrict(local.album, spotify.album);
 }
 
 bool isSpotifyVirtualPath(const std::string &path)
