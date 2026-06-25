@@ -21,30 +21,40 @@ std::set<std::string> g_seenQueueUris;
 std::map<std::string, std::chrono::steady_clock::time_point> g_suppressedFollowUris;
 
 template <typename PlaylistManagerPtr>
-bool findSpotifyUriInActivePlaylist(PlaylistManagerPtr &playlists, const std::string &uri, t_size &index)
+std::optional<t_size> findPlaylistByName(PlaylistManagerPtr &playlists, const char *playlistName)
 {
-    const t_size count = playlists->activeplaylist_get_item_count();
+    const t_size count = playlists->get_playlist_count();
+    for (t_size index = 0; index < count; ++index)
+    {
+        pfc::string8 name;
+        if (playlists->playlist_get_name(index, name) && std::strcmp(name.c_str(), playlistName) == 0)
+            return index;
+    }
+    return std::nullopt;
+}
+
+template <typename PlaylistManagerPtr>
+t_size getOrCreateSpotifyPlaylist(PlaylistManagerPtr &playlists)
+{
+    if (const auto existing = findPlaylistByName(playlists, "Spotify Playlist"))
+        return *existing;
+    return playlists->create_playlist("Spotify Playlist", SIZE_MAX, SIZE_MAX);
+}
+
+template <typename PlaylistManagerPtr>
+bool findSpotifyUriInPlaylist(PlaylistManagerPtr &playlists, t_size playlist, const std::string &uri, t_size &index)
+{
+    const t_size count = playlists->playlist_get_item_count(playlist);
     for (t_size i = 0; i < count; ++i)
     {
         metadb_handle_ptr handle;
-        if (playlists->activeplaylist_get_item_handle(handle, i) && std::strcmp(handle->get_path(), uri.c_str()) == 0)
+        if (playlists->playlist_get_item_handle(handle, playlist, i) && std::strcmp(handle->get_path(), uri.c_str()) == 0)
         {
             index = i;
             return true;
         }
     }
     return false;
-}
-
-template <typename PlaylistManagerPtr>
-bool isActivePlaylistSpotifyJam(PlaylistManagerPtr &playlists)
-{
-    const t_size active = playlists->get_active_playlist();
-    if (active == SIZE_MAX)
-        return false;
-
-    pfc::string8 name;
-    return playlists->playlist_get_name(active, name) && std::strcmp(name.c_str(), "Spotify Jam") == 0;
 }
 
 class StartSpotifyTrackCallback : public main_thread_callback
@@ -61,22 +71,30 @@ public:
             return;
 
         auto playlists = static_api_ptr_t<playlist_manager>();
-        t_size targetIndex = SIZE_MAX;
-        if (!findSpotifyUriInActivePlaylist(playlists, m_uri, targetIndex))
+        const t_size playlist = getOrCreateSpotifyPlaylist(playlists);
+        if (playlist == SIZE_MAX)
         {
-            targetIndex = playlists->activeplaylist_get_item_count();
+            FB2K_console_formatter() << "foo_spotify_linker: Spotify Playlist を作成できません。";
+            return;
+        }
+        playlists->set_active_playlist(playlist);
+
+        t_size targetIndex = SIZE_MAX;
+        if (!findSpotifyUriInPlaylist(playlists, playlist, m_uri, targetIndex))
+        {
+            targetIndex = playlists->playlist_get_item_count(playlist);
             const char *uri = m_uri.c_str();
-            if (!playlists->activeplaylist_insert_locations(targetIndex, pfc::list_single_ref_t<const char *>(uri), true, core_api::get_main_window()))
+            if (!playlists->playlist_insert_locations(playlist, targetIndex, pfc::list_single_ref_t<const char *>(uri), true, core_api::get_main_window()))
             {
                 FB2K_console_formatter() << "foo_spotify_linker: Spotify follow item を追加できません: " << m_uri.c_str();
                 return;
             }
         }
-        playlists->activeplaylist_set_focus_item(targetIndex);
-        playlists->activeplaylist_ensure_visible(targetIndex);
+        playlists->playlist_set_focus_item(playlist, targetIndex);
+        playlists->playlist_ensure_visible(playlist, targetIndex);
 
         suppressVirtualSpotifyPlaybackFor(std::chrono::seconds(5));
-        playlists->activeplaylist_execute_default_action(targetIndex);
+        playlists->playlist_execute_default_action(playlist, targetIndex);
         if (m_positionSeconds > 1.0)
             static_api_ptr_t<play_control>()->playback_seek(m_positionSeconds);
     }
@@ -97,18 +115,20 @@ public:
             return;
 
         auto playlists = static_api_ptr_t<playlist_manager>();
-        if (!isActivePlaylistSpotifyJam(playlists))
+        const t_size playlist = getOrCreateSpotifyPlaylist(playlists);
+        if (playlist == SIZE_MAX)
             return;
+        playlists->set_active_playlist(playlist);
 
-        t_size insertAt = playlists->activeplaylist_get_item_count();
+        t_size insertAt = playlists->playlist_get_item_count(playlist);
         for (const std::string &uriText : m_uris)
         {
             t_size existing = SIZE_MAX;
-            if (findSpotifyUriInActivePlaylist(playlists, uriText, existing))
+            if (findSpotifyUriInPlaylist(playlists, playlist, uriText, existing))
                 continue;
 
             const char *uri = uriText.c_str();
-            if (playlists->activeplaylist_insert_locations(insertAt, pfc::list_single_ref_t<const char *>(uri), false, core_api::get_main_window()))
+            if (playlists->playlist_insert_locations(playlist, insertAt, pfc::list_single_ref_t<const char *>(uri), false, core_api::get_main_window()))
                 ++insertAt;
         }
     }

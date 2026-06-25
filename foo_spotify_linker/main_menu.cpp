@@ -503,8 +503,8 @@ public:
                 popup_message::g_show("Jam の中身は Spotify Web API から直接取得できません。Jam に参加して再生中にしてから、もう一度追加してください。", "Spotify Linker");
                 return;
             }
-            addLocationsToPlaylist(tracks, "Spotify Jam", false, true);
-            popup_message::g_show(("Spotify Jam に現在再生と次の曲から " + std::to_string(tracks.size()) + " 曲を追加しました。以後は Follow Spotify playback で1曲ずつ補充します。").c_str(), "Spotify Linker");
+            addLocationsToPlaylist(tracks, "Spotify Playlist", false, true);
+            popup_message::g_show(("Spotify Playlist に現在再生と次の曲から " + std::to_string(tracks.size()) + " 曲を追加しました。以後は Follow Spotify playback で1曲ずつ補充します。").c_str(), "Spotify Linker");
             return;
         }
 
