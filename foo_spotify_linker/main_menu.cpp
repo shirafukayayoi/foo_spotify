@@ -82,7 +82,16 @@ bool isStrictTrackMatch(const TrackMetadata &local, const SpotifyTrackInfo &spot
 {
     if (!sameTextStrict(local.title, spotify.title))
         return false;
-    return sameTextStrict(local.artist, spotify.artist);
+    if (sameTextStrict(local.artist, spotify.artist))
+        return true;
+    if (!local.album.empty() && sameAlbumTextStrict(local.album, spotify.album))
+        return true;
+    if (local.lengthSeconds > 0.0 && spotify.durationMs > 0)
+    {
+        const double spotifySeconds = static_cast<double>(spotify.durationMs) / 1000.0;
+        return std::abs(local.lengthSeconds - spotifySeconds) <= 3.0;
+    }
+    return false;
 }
 
 bool isSpotifyVirtualPath(const std::string &path)
