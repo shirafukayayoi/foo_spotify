@@ -139,6 +139,27 @@ std::optional<std::string> findLocalPathForSpotifyUri(const std::string &spotify
     return std::nullopt;
 }
 
+int foobarVolumePercent()
+{
+    float volumeDb = 0.0f;
+    try
+    {
+        volumeDb = static_api_ptr_t<play_control>()->get_volume();
+    }
+    catch (...)
+    {
+        return 100;
+    }
+
+    if (volumeDb <= play_control::volume_mute)
+        return 0;
+    if (volumeDb >= 0.0f)
+        return 100;
+
+    const double linear = std::pow(10.0, static_cast<double>(volumeDb) / 20.0);
+    return pfc::clip_t<int>(static_cast<int>(std::lround(linear * 100.0)), 0, 100);
+}
+
 std::string playbackLocationForSpotifyUri(const std::string &spotifyTrackUri)
 {
     if (const auto localPath = findLocalPathForSpotifyUri(spotifyTrackUri))
@@ -195,7 +216,14 @@ public:
 
         suppressVirtualSpotifyPlaybackFor(std::chrono::seconds(5));
         if (usingLocalFile)
+        {
+            SpotifyApiClient().setVolume(0);
             suppressSpotifyControlSyncForFollow(std::chrono::seconds(10));
+        }
+        else
+        {
+            SpotifyApiClient().setVolume(foobarVolumePercent());
+        }
         playlists->playlist_execute_default_action(playlist, targetIndex);
         if (m_positionSeconds > 1.0)
             static_api_ptr_t<play_control>()->playback_seek(m_positionSeconds);

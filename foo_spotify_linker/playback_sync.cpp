@@ -120,7 +120,11 @@ public:
         m_lastSpotifyUri = spotifyUri;
         suppressFollowedSpotifyTrack(spotifyUri, std::chrono::seconds(15));
         if (!shouldSuppressSpotifyControls())
+        {
+            if (!m_lastTrackWasSpotifyVirtual)
+                m_client.setVolume(0);
             m_client.play(spotifyUri, 0.0, allowMuteOnSync);
+        }
     }
 
     void on_playback_stop(play_control::t_stop_reason reason) override
@@ -202,7 +206,7 @@ public:
 
     void on_volume_change(float newValue) override
     {
-        if (isSpotifyVirtualTrack(m_lastSpotifyUri) && !shouldSuppressSpotifyControls())
+        if (m_lastTrackWasSpotifyVirtual && isSpotifyVirtualTrack(m_lastSpotifyUri) && !shouldSuppressSpotifyControls())
             m_client.setVolume(foobarVolumeDbToPercent(newValue));
     }
 
