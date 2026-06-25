@@ -104,8 +104,9 @@ Jam 招待リンク (`open.spotify.com/socialsession/...` や、その `spotify.
 `Follow Spotify playback in foobar2000` を有効にすると、Spotify 側で現在再生中の track を polling し、foobar2000 側でも `spotify:track:...` 仮想トラックとして再生開始します。あわせて Spotify の queue 先頭に見える次曲を active playlist へ1曲ずつ追加します。Jam 専用 API は Spotify Web API にないため、Jam か通常再生かは判定せず「自分の Spotify アカウントの現在再生」と「自分の Spotify queue」を追従します。
 foobar2000 起動直後の最初の polling では、Spotify の現在再生と queue を既読として記録するだけで、playlist への追加や再生開始は行いません。これにより、Spotify 側で Jam を開いたまま foobar2000 を起動しても、起動直後に大量追加されることを避けます。
 
-`Auto Link Library Tracks` は foobar2000 Media Library 内のローカルファイルだけをバックグラウンドで走査し、未登録の曲だけ Spotify track と自動連携します。YouTube Source などの remote / non-local source は対象外です。曖昧な候補を避けるため、Spotify 検索の上位候補を再取得し、タイトル、アーティスト、ローカル側にアルバム名がある場合はアルバム名、さらに曲の長さが一致した場合だけ登録します。長さは3秒以内の差だけ許容します。
-Spotify 側のアーティスト名が英字表記で、ローカルタグが日本語表記の場合に備えて、検索はアーティスト込みの条件から始め、見つからない場合は track + album や album 主体の条件へフォールバックします。Library 自動連携では、アーティスト名が一致しない場合でも、タイトル、アルバム、長さが一致した時だけ登録します。
+`Auto Link Library Tracks` は foobar2000 Media Library 内のローカルファイルだけをバックグラウンドで走査し、未登録の曲だけ Spotify track と自動連携します。YouTube Source などの remote / non-local source は対象外です。Spotify 検索の上位候補を再取得し、タイトルが一致したうえで、アーティスト、アルバム、または曲の長さが合う候補を登録します。Spotify 側のアーティスト名が英字表記で、ローカルタグが日本語表記の場合に備えて、検索はアーティスト込みの条件から始め、見つからない場合は track + album や track 主体の条件へフォールバックします。
+
+プラグイン内の自動連携で取りきれない曲は、`tools/spotify_link_from_csv.py` でCSVから `track_map` へ直接登録できます。使い方は [tools/README.md](tools/README.md) を参照してください。
 
 対応 URL 例:
 
