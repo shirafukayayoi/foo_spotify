@@ -376,6 +376,14 @@ std::optional<std::string> spotifyTrackAlbumName(const std::string &json)
     return jsonStringValueInRange(json, "name", range->first, range->second);
 }
 
+std::optional<std::string> spotifyTrackAlbumUri(const std::string &json)
+{
+    const auto range = jsonTopLevelValueRange(json, "album");
+    if (!range)
+        return std::nullopt;
+    return jsonStringValueInRange(json, "uri", range->first, range->second);
+}
+
 std::optional<std::string> spotifyTrackAlbumImageUrl(const std::string &json)
 {
     const auto albumRange = jsonTopLevelValueRange(json, "album");
@@ -629,6 +637,8 @@ std::optional<SpotifyTrackInfo> SpotifyApiClient::getTrackInfo(const std::string
         info.artist = *artist;
     if (const auto album = spotifyTrackAlbumName(response->body))
         info.album = *album;
+    if (const auto albumUri = spotifyTrackAlbumUri(response->body))
+        info.albumUri = *albumUri;
     if (const auto imageUrl = spotifyTrackAlbumImageUrl(response->body))
         info.albumImageUrl = *imageUrl;
     if (const auto duration = jsonIntValueLocal(response->body, "duration_ms"))

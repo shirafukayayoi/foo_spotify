@@ -70,14 +70,14 @@ vcpkg install sqlite3 nlohmann-json curl openssl fmt
 
 foobar2000 上でトラックを右クリックし、`Spotify Linker` メニューから登録します。
 
-- `Set Track URI...`: 選択トラック単位で Spotify track URI / URL を登録
+- `Set Track URI...`: Spotify track URI / URL を登録。track の Spotify album を取得できる場合は、同じローカルアルバムへ一括登録
 - `Auto Set Track URI`: 選択トラックのタグから Spotify track を検索して登録
 - `Show Track URI`: 選択トラック単位で登録済みの Spotify track URI を表示
 - `Remove Track URI`: 選択トラック単位の登録を削除
 - `Set Track URI from Album URL...`: Spotify album URL / URI から、同じアルバム内のローカル曲へ `TRACKNUMBER` 対応で Spotify track URI を一括登録
 - `Auto Set Track URI from Album`: 選択トラックのアルバムタグから Spotify album を検索し、同じアルバム内のローカル曲へ Spotify track URI を一括登録
 
-album URL / URI は保存せず、登録時点で Spotify track URI に解決して `track_map` に保存します。たとえばアルバム内のどれか 1 曲に album URL を入れた場合、Media Library または現在の playlist にある同じアルバムの曲へ、それぞれの `TRACKNUMBER` に対応する `spotify:track:...` が登録されます。
+album URL / URI は保存せず、登録時点で Spotify track URI に解決して `track_map` に保存します。track URL / URI を入れた場合も、その track の Spotify album URI を取得し、Media Library または現在の playlist にある同じアルバムの曲へ、それぞれの `TRACKNUMBER` に対応する `spotify:track:...` を一括登録します。
 
 ## Spotify 仮想トラック
 

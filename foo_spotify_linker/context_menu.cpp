@@ -156,6 +156,14 @@ size_t registerAlbumTrackMappings(const TrackMetadata &seed, metadb_handle_list_
     return registered;
 }
 
+size_t registerAlbumTrackMappingsFromTrackUri(const TrackMetadata &seed, metadb_handle_list_cref selected, const std::string &spotifyTrackUri)
+{
+    const auto info = SpotifyApiClient().getTrackInfo(spotifyTrackUri);
+    if (!info || info->albumUri.empty())
+        return 0;
+    return registerAlbumTrackMappings(seed, selected, info->albumUri);
+}
+
 class UriDialog : public CDialogImpl<UriDialog>
 {
 public:
@@ -415,7 +423,14 @@ public:
                     popup_message::g_show(("Album 内の " + std::to_string(registered) + " 曲へ Track URI を登録しました。").c_str(), "Spotify Linker");
                     return;
                 }
+                const size_t registered = registerAlbumTrackMappingsFromTrackUri(metadata, data, trackUri);
+                if (registered > 0)
+                {
+                    popup_message::g_show(("Track URL の album から " + std::to_string(registered) + " 曲へ Track URI を登録しました。").c_str(), "Spotify Linker");
+                    return;
+                }
                 MappingManager::instance().addTrackMapping(localHash, trackUri);
+                popup_message::g_show(("Track URI を登録しました:\n" + trackUri).c_str(), "Spotify Linker");
             }
         }
     }
