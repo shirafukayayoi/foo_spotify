@@ -360,6 +360,26 @@ void startLibraryAutoLink()
     runLibraryAutoLink(std::move(tracks));
 }
 
+std::vector<std::string> getCurrentAndNextSpotifyTrackUris()
+{
+    std::vector<std::string> tracks;
+    SpotifyApiClient api;
+    if (const auto current = api.getCurrentPlayback())
+    {
+        if (!current->trackUri.empty())
+            tracks.push_back(current->trackUri);
+    }
+    for (const auto &uri : api.getQueueTrackUris())
+    {
+        if (std::find(tracks.begin(), tracks.end(), uri) == tracks.end())
+        {
+            tracks.push_back(uri);
+            break;
+        }
+    }
+    return tracks;
+}
+
 class AddSpotifyLinkDialog : public CDialogImpl<AddSpotifyLinkDialog>
 {
 public:
@@ -473,31 +493,20 @@ public:
 
         if (parsed->kind == SpotifyLinkKind::playlist)
         {
-            const auto tracks = SpotifyApiClient().getPlaylistTrackUris(parsed->uri);
+            const auto tracks = getCurrentAndNextSpotifyTrackUris();
             if (tracks.empty())
             {
-                popup_message::g_show("Spotify playlist の曲を取得できませんでした。再ログインが必要な場合があります。", "Spotify Linker");
+                popup_message::g_show("Spotify 側で再生中の曲を取得できませんでした。Spotifyで対象playlistを再生してから、もう一度追加してください。", "Spotify Linker");
                 return;
             }
-            addLocationsToNewPlaylist(tracks, "Spotify Playlist", false);
-            popup_message::g_show(("Playlist から " + std::to_string(tracks.size()) + " 曲を追加しました。").c_str(), "Spotify Linker");
+            addLocationsToPlaylist(tracks, "Spotify Playlist", false, true);
+            popup_message::g_show(("Spotify Playlist に現在再生と次の曲から " + std::to_string(tracks.size()) + " 曲を追加しました。以後は Follow Spotify playback で1曲ずつ補充します。").c_str(), "Spotify Linker");
             return;
         }
 
         if (parsed->kind == SpotifyLinkKind::socialSession)
         {
-            std::vector<std::string> tracks;
-            SpotifyApiClient api;
-            if (const auto current = api.getCurrentPlayback())
-                tracks.push_back(current->trackUri);
-            for (const auto &uri : api.getQueueTrackUris())
-            {
-                if (std::find(tracks.begin(), tracks.end(), uri) == tracks.end())
-                {
-                    tracks.push_back(uri);
-                    break;
-                }
-            }
+            const auto tracks = getCurrentAndNextSpotifyTrackUris();
             if (tracks.empty())
             {
                 popup_message::g_show("Jam の中身は Spotify Web API から直接取得できません。Jam に参加して再生中にしてから、もう一度追加してください。", "Spotify Linker");
