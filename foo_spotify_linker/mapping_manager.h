@@ -15,11 +15,8 @@ public:
 
     std::optional<std::string> resolve(const TrackMetadata &metadata);
     std::optional<std::string> getTrackMapping(const std::string &localHash);
-    std::optional<std::string> getAlbumMapping(const std::string &albumId);
     bool addTrackMapping(const std::string &localHash, const std::string &spotifyUri);
     bool removeTrackMapping(const std::string &localHash);
-    bool addAlbumMapping(const std::string &albumId, const std::string &spotifyUri);
-    bool removeAlbumMapping(const std::string &albumId);
     bool setConfig(const std::string &key, const std::string &value);
     std::string getConfig(const std::string &key, const std::string &fallback = "");
 

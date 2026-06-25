@@ -102,18 +102,24 @@ public:
             return;
         }
 
-        m_lastSpotifyUri = *uri;
         const int zeroBasedAlbumOffset = metadata.trackNumber > 0 ? metadata.trackNumber - 1 : 0;
         const bool allowMuteOnSync = !previousWasSpotifyVirtual;
+        std::string spotifyUri = *uri;
         if (uri->rfind("spotify:album:", 0) == 0)
         {
-            m_client.playAlbum(*uri, zeroBasedAlbumOffset, 0.0, allowMuteOnSync);
+            const auto resolved = m_client.getAlbumTrackUri(*uri, zeroBasedAlbumOffset);
+            if (!resolved)
+            {
+                FB2K_console_formatter() << "foo_spotify_linker: 古い album mapping から track URI を取得できません: " << uri->c_str();
+                return;
+            }
+            spotifyUri = *resolved;
+            MappingManager::instance().addTrackMapping(makeLocalHash(metadata), spotifyUri);
         }
-        else
-        {
-            suppressFollowedSpotifyTrack(*uri, std::chrono::seconds(15));
-            m_client.play(*uri, 0.0, allowMuteOnSync);
-        }
+
+        m_lastSpotifyUri = spotifyUri;
+        suppressFollowedSpotifyTrack(spotifyUri, std::chrono::seconds(15));
+        m_client.play(spotifyUri, 0.0, allowMuteOnSync);
     }
 
     void on_playback_stop(play_control::t_stop_reason reason) override

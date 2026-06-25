@@ -159,8 +159,6 @@ public:
         cmd_remove_uri,
         cmd_set_album_uri,
         cmd_auto_album_uri,
-        cmd_show_album_uri,
-        cmd_remove_album_uri,
         cmd_count
     };
 
@@ -186,16 +184,10 @@ public:
             out = "Remove Track URI";
             return;
         case cmd_set_album_uri:
-            out = "Set Album URI...";
+            out = "Set Track URI from Album URL...";
             return;
         case cmd_auto_album_uri:
-            out = "Auto Set Album URI";
-            return;
-        case cmd_show_album_uri:
-            out = "Show Album URI";
-            return;
-        case cmd_remove_album_uri:
-            out = "Remove Album URI";
+            out = "Auto Set Track URI from Album";
             return;
         default:
             uBugCheck();
@@ -219,16 +211,10 @@ public:
             out = "選択トラックに登録済みの Spotify track URI を表示します。";
             return true;
         case cmd_set_album_uri:
-            out = "選択トラックのアルバムへ Spotify album URI を手動マッピングします。";
+            out = "Spotify album URL から選択トラックに対応する Spotify track URI を取得して登録します。";
             return true;
         case cmd_auto_album_uri:
-            out = "選択トラックのアルバムタグから Spotify album を検索して登録します。";
-            return true;
-        case cmd_show_album_uri:
-            out = "選択トラックのアルバムに登録済みの Spotify album URI を表示します。";
-            return true;
-        case cmd_remove_album_uri:
-            out = "選択トラックのアルバム単位 Spotify URI マッピングを削除します。";
+            out = "選択トラックのアルバムタグから Spotify album を検索し、対応する Spotify track URI を登録します。";
             return true;
         default:
             return false;
@@ -251,10 +237,6 @@ public:
             return guid_context_set_album_uri;
         case cmd_auto_album_uri:
             return guid_context_auto_album_uri;
-        case cmd_show_album_uri:
-            return guid_context_show_album_uri;
-        case cmd_remove_album_uri:
-            return guid_context_remove_album_uri;
         default:
             uBugCheck();
         }
@@ -302,34 +284,30 @@ public:
             popup_message::g_show(("Track URI を登録しました:\n" + *uri).c_str(), "Spotify Linker");
             return;
         }
-        if (index == cmd_show_album_uri)
-        {
-            const auto uri = MappingManager::instance().getAlbumMapping(makeAlbumId(metadata));
-            popup_message::g_show((uri ? "Album URI:\n" + *uri : "Album URI は未登録です。").c_str(), "Spotify Linker");
-            return;
-        }
-        if (index == cmd_remove_album_uri)
-        {
-            MappingManager::instance().removeAlbumMapping(makeAlbumId(metadata));
-            return;
-        }
         if (index == cmd_auto_album_uri)
         {
             SpotifyApiClient client;
-            std::optional<std::string> uri;
+            std::optional<std::string> albumUri;
             for (const auto &query : makeAlbumSearchQueries(metadata))
             {
-                uri = client.searchAlbum(query);
-                if (uri)
+                albumUri = client.searchAlbum(query);
+                if (albumUri)
                     break;
             }
-            if (!uri)
+            if (!albumUri)
             {
                 popup_message::g_show("Spotify album を検索できませんでした。", "Spotify Linker");
                 return;
             }
-            MappingManager::instance().addAlbumMapping(makeAlbumId(metadata), *uri);
-            popup_message::g_show(("Album URI を登録しました:\n" + *uri).c_str(), "Spotify Linker");
+            const int offset = metadata.trackNumber > 0 ? metadata.trackNumber - 1 : 0;
+            const auto trackUri = client.getAlbumTrackUri(*albumUri, offset);
+            if (!trackUri)
+            {
+                popup_message::g_show("Spotify album から該当 track URI を取得できませんでした。", "Spotify Linker");
+                return;
+            }
+            MappingManager::instance().addTrackMapping(localHash, *trackUri);
+            popup_message::g_show(("Track URI を登録しました:\n" + *trackUri).c_str(), "Spotify Linker");
             return;
         }
 
@@ -339,7 +317,15 @@ public:
         {
             if (albumMode)
             {
-                MappingManager::instance().addAlbumMapping(makeAlbumId(metadata), dialog.uri());
+                const int offset = metadata.trackNumber > 0 ? metadata.trackNumber - 1 : 0;
+                const auto resolved = SpotifyApiClient().getAlbumTrackUri(dialog.uri(), offset);
+                if (!resolved)
+                {
+                    popup_message::g_show("Album URL から該当 track URI を取得できませんでした。", "Spotify Linker");
+                    return;
+                }
+                MappingManager::instance().addTrackMapping(localHash, *resolved);
+                popup_message::g_show(("Track URI を登録しました:\n" + *resolved).c_str(), "Spotify Linker");
             }
             else
             {
@@ -350,7 +336,7 @@ public:
                     const auto resolved = SpotifyApiClient().getAlbumTrackUri(dialog.uri(), offset);
                     if (!resolved)
                     {
-                        popup_message::g_show("Album URI から該当トラックを取得できませんでした。", "Spotify Linker");
+                        popup_message::g_show("Album URL から該当 track URI を取得できませんでした。", "Spotify Linker");
                         return;
                     }
                     trackUri = *resolved;
