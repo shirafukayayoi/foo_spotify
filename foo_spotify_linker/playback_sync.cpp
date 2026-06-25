@@ -119,7 +119,8 @@ public:
 
         m_lastSpotifyUri = spotifyUri;
         suppressFollowedSpotifyTrack(spotifyUri, std::chrono::seconds(15));
-        m_client.play(spotifyUri, 0.0, allowMuteOnSync);
+        if (!shouldSuppressSpotifyControls())
+            m_client.play(spotifyUri, 0.0, allowMuteOnSync);
     }
 
     void on_playback_stop(play_control::t_stop_reason reason) override

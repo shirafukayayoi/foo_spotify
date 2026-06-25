@@ -1,4 +1,6 @@
 #include "stdafx.h"
+#include "mapping_manager.h"
+#include "metadata.h"
 #include "settings.h"
 #include "spotify_follow.h"
 #include "spotify_api_client.h"
@@ -58,6 +60,98 @@ bool findSpotifyUriInPlaylist(PlaylistManagerPtr &playlists, t_size playlist, co
     return false;
 }
 
+template <typename PlaylistManagerPtr>
+bool findPathInPlaylist(PlaylistManagerPtr &playlists, t_size playlist, const std::string &path, t_size &index)
+{
+    const t_size count = playlists->playlist_get_item_count(playlist);
+    for (t_size i = 0; i < count; ++i)
+    {
+        metadb_handle_ptr handle;
+        if (playlists->playlist_get_item_handle(handle, playlist, i) && std::strcmp(handle->get_path(), path.c_str()) == 0)
+        {
+            index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool isLocalFilesystemPath(const std::string &path)
+{
+    if (path.empty() || path.rfind("spotify:", 0) == 0)
+        return false;
+    try
+    {
+        return !filesystem::g_is_remote_or_unrecognized(path.c_str());
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+std::optional<std::string> mappedSpotifyUri(const TrackMetadata &metadata)
+{
+    return MappingManager::instance().getTrackMapping(makeLocalHash(metadata));
+}
+
+std::optional<std::string> findLocalPathForSpotifyUriInList(const std::string &spotifyTrackUri, metadb_handle_list_cref handles)
+{
+    for (t_size index = 0; index < handles.get_count(); ++index)
+    {
+        const auto metadata = readTrackMetadata(handles.get_item(index));
+        if (!isLocalFilesystemPath(metadata.path))
+            continue;
+        const auto mapped = mappedSpotifyUri(metadata);
+        if (mapped && *mapped == spotifyTrackUri)
+            return metadata.path;
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string> findLocalPathForSpotifyUri(const std::string &spotifyTrackUri)
+{
+    auto library = library_manager::get();
+    if (library->is_library_enabled())
+    {
+        metadb_handle_list handles;
+        library->get_all_items(handles);
+        if (const auto path = findLocalPathForSpotifyUriInList(spotifyTrackUri, handles))
+            return path;
+    }
+
+    auto playlists = static_api_ptr_t<playlist_manager>();
+    const t_size activePlaylist = playlists->get_active_playlist();
+    if (activePlaylist != SIZE_MAX)
+    {
+        metadb_handle_list handles;
+        const t_size count = playlists->playlist_get_item_count(activePlaylist);
+        for (t_size index = 0; index < count; ++index)
+        {
+            metadb_handle_ptr handle;
+            if (playlists->playlist_get_item_handle(handle, activePlaylist, index))
+                handles.add_item(handle);
+        }
+        if (const auto path = findLocalPathForSpotifyUriInList(spotifyTrackUri, handles))
+            return path;
+    }
+
+    return std::nullopt;
+}
+
+std::string playbackLocationForSpotifyUri(const std::string &spotifyTrackUri)
+{
+    if (const auto localPath = findLocalPathForSpotifyUri(spotifyTrackUri))
+        return *localPath;
+    return spotifyTrackUri;
+}
+
+void suppressSpotifyControlSyncForFollow(std::chrono::milliseconds duration)
+{
+    std::lock_guard<std::mutex> lock(g_suppressMutex);
+    g_controlSuppressUntil = std::chrono::steady_clock::now() + duration;
+}
+
 class StartSpotifyTrackCallback : public main_thread_callback
 {
 public:
@@ -71,6 +165,8 @@ public:
         if (m_uri.empty())
             return;
 
+        const std::string location = playbackLocationForSpotifyUri(m_uri);
+        const bool usingLocalFile = location != m_uri;
         auto playlists = static_api_ptr_t<playlist_manager>();
         const t_size playlist = getOrCreateSpotifyPlaylist(playlists);
         if (playlist == SIZE_MAX)
@@ -81,13 +177,16 @@ public:
         playlists->set_active_playlist(playlist);
 
         t_size targetIndex = SIZE_MAX;
-        if (!findSpotifyUriInPlaylist(playlists, playlist, m_uri, targetIndex))
+        const bool alreadyInPlaylist = usingLocalFile
+                                           ? findPathInPlaylist(playlists, playlist, location, targetIndex)
+                                           : findSpotifyUriInPlaylist(playlists, playlist, location, targetIndex);
+        if (!alreadyInPlaylist)
         {
             targetIndex = playlists->playlist_get_item_count(playlist);
-            const char *uri = m_uri.c_str();
-            if (!playlists->playlist_insert_locations(playlist, targetIndex, pfc::list_single_ref_t<const char *>(uri), true, core_api::get_main_window()))
+            const char *path = location.c_str();
+            if (!playlists->playlist_insert_locations(playlist, targetIndex, pfc::list_single_ref_t<const char *>(path), true, core_api::get_main_window()))
             {
-                FB2K_console_formatter() << "foo_spotify_linker: Spotify follow item を追加できません: " << m_uri.c_str();
+                FB2K_console_formatter() << "foo_spotify_linker: Spotify follow item を追加できません: " << location.c_str();
                 return;
             }
         }
@@ -95,6 +194,8 @@ public:
         playlists->playlist_ensure_visible(playlist, targetIndex);
 
         suppressVirtualSpotifyPlaybackFor(std::chrono::seconds(5));
+        if (usingLocalFile)
+            suppressSpotifyControlSyncForFollow(std::chrono::seconds(10));
         playlists->playlist_execute_default_action(playlist, targetIndex);
         if (m_positionSeconds > 1.0)
             static_api_ptr_t<play_control>()->playback_seek(m_positionSeconds);
@@ -124,12 +225,13 @@ public:
         t_size insertAt = playlists->playlist_get_item_count(playlist);
         for (const std::string &uriText : m_uris)
         {
+            const std::string location = playbackLocationForSpotifyUri(uriText);
             t_size existing = SIZE_MAX;
-            if (findSpotifyUriInPlaylist(playlists, playlist, uriText, existing))
+            if (findPathInPlaylist(playlists, playlist, location, existing))
                 continue;
 
-            const char *uri = uriText.c_str();
-            if (playlists->playlist_insert_locations(playlist, insertAt, pfc::list_single_ref_t<const char *>(uri), false, core_api::get_main_window()))
+            const char *path = location.c_str();
+            if (playlists->playlist_insert_locations(playlist, insertAt, pfc::list_single_ref_t<const char *>(path), false, core_api::get_main_window()))
                 ++insertAt;
         }
     }
@@ -149,7 +251,7 @@ std::vector<std::string> firstUnseenQueueUri(const std::vector<std::string> &uri
     return {};
 }
 
-bool primeFollowState(const std::optional<SpotifyPlaybackInfo> &playback, const std::vector<std::string> &queueUris)
+bool primeFollowState(const std::optional<SpotifyPlaybackInfo> &playback)
 {
     std::lock_guard<std::mutex> lock(g_followStateMutex);
     if (g_followPrimed)
@@ -160,8 +262,6 @@ bool primeFollowState(const std::optional<SpotifyPlaybackInfo> &playback, const 
         g_lastFollowedUri = playback->trackUri;
         g_seenQueueUris.insert(playback->trackUri);
     }
-    for (const auto &uri : queueUris)
-        g_seenQueueUris.insert(uri);
     g_followPrimed = true;
     return true;
 }
@@ -292,8 +392,7 @@ void startSpotifyFollowWorker()
             if (g_cfg_follow_spotify_playback.get())
             {
                 const auto playback = client.getCurrentPlayback();
-                const auto queueSnapshot = client.getQueueTrackUris();
-                if (primeFollowState(playback, queueSnapshot))
+                if (primeFollowState(playback))
                 {
                     const int requestedInterval = static_cast<int>(g_cfg_polling_interval_ms.get());
                     const int interval = requestedInterval < 1000 ? 1000 : requestedInterval;
@@ -310,8 +409,6 @@ void startSpotifyFollowWorker()
                         startFollowedSpotifyTrackInFoobar(playback->trackUri, static_cast<double>(playback->progressMs) / 1000.0);
                 }
 
-                const auto queueUris = firstUnseenQueueUri(queueSnapshot);
-                addSpotifyQueueTracksInFoobar(queueUris);
             }
             else
             {
