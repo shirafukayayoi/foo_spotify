@@ -2,6 +2,7 @@
 #include "auth_manager.h"
 #include "resource.h"
 #include "settings.h"
+#include "spotify_api_client.h"
 
 namespace fsl
 {
@@ -75,6 +76,7 @@ public:
     COMMAND_HANDLER_EX(IDC_BTN_BROWSE_DB, BN_CLICKED, onBrowseDb)
     COMMAND_HANDLER_EX(IDC_BTN_LOGIN, BN_CLICKED, onLogin)
     COMMAND_HANDLER_EX(IDC_BTN_CLEAR_TOKEN, BN_CLICKED, onClearToken)
+    COMMAND_HANDLER_EX(IDC_BTN_USE_CURRENT_DEVICE, BN_CLICKED, onUseCurrentDevice)
     END_MSG_MAP()
 
 private:
@@ -130,6 +132,30 @@ private:
     {
         AuthManager::instance().clearTokens();
         SetDlgItemText(IDC_STATIC_STATUS, statusText().c_str());
+        onChanged();
+    }
+
+    void onUseCurrentDevice(UINT, int, CWindow)
+    {
+        apply();
+        const auto playback = SpotifyApiClient().getCurrentPlayback();
+        if (!playback || playback->deviceId.empty())
+        {
+            popup_message::g_show("現在再生中のSpotifyデバイスIDを取得できませんでした。Spotifyで何か再生してからもう一度押してください。", "Spotify Linker");
+            SetDlgItemText(IDC_STATIC_STATUS, L"現在再生中のSpotifyデバイスIDを取得できませんでした。");
+            return;
+        }
+
+        SetDlgItemText(IDC_EDIT_DEVICE_ID, pfc::stringcvt::string_os_from_utf8(playback->deviceId.c_str()));
+        g_cfg_default_device_id = playback->deviceId.c_str();
+        std::string message = "現在再生中デバイスを設定しました: ";
+        if (!playback->deviceName.empty())
+            message += playback->deviceName;
+        else
+            message += playback->deviceId;
+        if (!playback->deviceType.empty())
+            message += " (" + playback->deviceType + ")";
+        SetDlgItemText(IDC_STATIC_STATUS, pfc::stringcvt::string_os_from_utf8(message.c_str()));
         onChanged();
     }
 
