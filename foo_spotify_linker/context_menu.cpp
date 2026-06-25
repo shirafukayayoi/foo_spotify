@@ -78,6 +78,84 @@ bool normalizeSpotifyUriAny(std::string input, std::string &out, SpotifyUriKind 
     return false;
 }
 
+bool isLocalFilesystemPath(const std::string &path)
+{
+    if (path.empty() || path.rfind("spotify:", 0) == 0)
+        return false;
+    try
+    {
+        return !filesystem::g_is_remote_or_unrecognized(path.c_str());
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+void addAlbumMate(std::vector<TrackMetadata> &out, std::set<std::string> &seenHashes, const TrackMetadata &seed, const TrackMetadata &candidate)
+{
+    if (makeAlbumId(candidate) != makeAlbumId(seed))
+        return;
+    if (!isLocalFilesystemPath(candidate.path))
+        return;
+    const std::string hash = makeLocalHash(candidate);
+    if (seenHashes.insert(hash).second)
+        out.push_back(candidate);
+}
+
+std::vector<TrackMetadata> collectAlbumMates(const TrackMetadata &seed, metadb_handle_list_cref selected)
+{
+    std::vector<TrackMetadata> tracks;
+    std::set<std::string> seenHashes;
+
+    for (t_size index = 0; index < selected.get_count(); ++index)
+        addAlbumMate(tracks, seenHashes, seed, readTrackMetadata(selected.get_item(index)));
+
+    auto library = library_manager::get();
+    if (library->is_library_enabled())
+    {
+        metadb_handle_list handles;
+        library->get_all_items(handles);
+        for (t_size index = 0; index < handles.get_count(); ++index)
+            addAlbumMate(tracks, seenHashes, seed, readTrackMetadata(handles.get_item(index)));
+    }
+
+    auto playlists = static_api_ptr_t<playlist_manager>();
+    const t_size activePlaylist = playlists->get_active_playlist();
+    if (activePlaylist != SIZE_MAX)
+    {
+        const t_size count = playlists->playlist_get_item_count(activePlaylist);
+        for (t_size index = 0; index < count; ++index)
+        {
+            metadb_handle_ptr handle;
+            if (playlists->playlist_get_item_handle(handle, activePlaylist, index))
+                addAlbumMate(tracks, seenHashes, seed, readTrackMetadata(handle));
+        }
+    }
+
+    return tracks;
+}
+
+size_t registerAlbumTrackMappings(const TrackMetadata &seed, metadb_handle_list_cref selected, const std::string &spotifyAlbumUri)
+{
+    const auto spotifyTracks = SpotifyApiClient().getAlbumTrackUris(spotifyAlbumUri);
+    if (spotifyTracks.empty())
+        return 0;
+
+    size_t registered = 0;
+    for (const auto &metadata : collectAlbumMates(seed, selected))
+    {
+        if (metadata.trackNumber <= 0)
+            continue;
+        const size_t index = static_cast<size_t>(metadata.trackNumber - 1);
+        if (index >= spotifyTracks.size())
+            continue;
+        if (MappingManager::instance().addTrackMapping(makeLocalHash(metadata), spotifyTracks[index]))
+            ++registered;
+    }
+    return registered;
+}
+
 class UriDialog : public CDialogImpl<UriDialog>
 {
 public:
@@ -299,15 +377,13 @@ public:
                 popup_message::g_show("Spotify album を検索できませんでした。", "Spotify Linker");
                 return;
             }
-            const int offset = metadata.trackNumber > 0 ? metadata.trackNumber - 1 : 0;
-            const auto trackUri = client.getAlbumTrackUri(*albumUri, offset);
-            if (!trackUri)
+            const size_t registered = registerAlbumTrackMappings(metadata, data, *albumUri);
+            if (registered == 0)
             {
-                popup_message::g_show("Spotify album から該当 track URI を取得できませんでした。", "Spotify Linker");
+                popup_message::g_show("Spotify album から登録できる track URI を取得できませんでした。", "Spotify Linker");
                 return;
             }
-            MappingManager::instance().addTrackMapping(localHash, *trackUri);
-            popup_message::g_show(("Track URI を登録しました:\n" + *trackUri).c_str(), "Spotify Linker");
+            popup_message::g_show(("Album 内の " + std::to_string(registered) + " 曲へ Track URI を登録しました。").c_str(), "Spotify Linker");
             return;
         }
 
@@ -317,29 +393,27 @@ public:
         {
             if (albumMode)
             {
-                const int offset = metadata.trackNumber > 0 ? metadata.trackNumber - 1 : 0;
-                const auto resolved = SpotifyApiClient().getAlbumTrackUri(dialog.uri(), offset);
-                if (!resolved)
+                const size_t registered = registerAlbumTrackMappings(metadata, data, dialog.uri());
+                if (registered == 0)
                 {
-                    popup_message::g_show("Album URL から該当 track URI を取得できませんでした。", "Spotify Linker");
+                    popup_message::g_show("Album URL から登録できる track URI を取得できませんでした。", "Spotify Linker");
                     return;
                 }
-                MappingManager::instance().addTrackMapping(localHash, *resolved);
-                popup_message::g_show(("Track URI を登録しました:\n" + *resolved).c_str(), "Spotify Linker");
+                popup_message::g_show(("Album 内の " + std::to_string(registered) + " 曲へ Track URI を登録しました。").c_str(), "Spotify Linker");
             }
             else
             {
                 std::string trackUri = dialog.uri();
                 if (dialog.resolvedKind() == SpotifyUriKind::album)
                 {
-                    const int offset = metadata.trackNumber > 0 ? metadata.trackNumber - 1 : 0;
-                    const auto resolved = SpotifyApiClient().getAlbumTrackUri(dialog.uri(), offset);
-                    if (!resolved)
+                    const size_t registered = registerAlbumTrackMappings(metadata, data, dialog.uri());
+                    if (registered == 0)
                     {
-                        popup_message::g_show("Album URL から該当 track URI を取得できませんでした。", "Spotify Linker");
+                        popup_message::g_show("Album URL から登録できる track URI を取得できませんでした。", "Spotify Linker");
                         return;
                     }
-                    trackUri = *resolved;
+                    popup_message::g_show(("Album 内の " + std::to_string(registered) + " 曲へ Track URI を登録しました。").c_str(), "Spotify Linker");
+                    return;
                 }
                 MappingManager::instance().addTrackMapping(localHash, trackUri);
             }
