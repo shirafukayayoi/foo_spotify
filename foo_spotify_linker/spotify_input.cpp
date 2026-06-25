@@ -166,7 +166,8 @@ public:
         m_position = seconds;
         m_endGraceUntil = {};
         m_replayRequested = false;
-        startSpotifyPlayback(seconds);
+        if (!shouldSuppressSpotifyControls())
+            startSpotifyPlayback(seconds);
     }
 
     bool decode_can_seek()
@@ -176,6 +177,8 @@ public:
 
     void set_pause(bool paused)
     {
+        if (shouldSuppressSpotifyControls())
+            return;
         if (paused)
             SpotifyApiClient().pause();
         else

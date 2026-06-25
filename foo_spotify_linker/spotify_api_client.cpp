@@ -601,7 +601,7 @@ std::optional<std::string> SpotifyApiClient::getAlbumTrackUri(const std::string 
 
 std::optional<SpotifyPlaybackInfo> SpotifyApiClient::getCurrentPlayback()
 {
-    const auto response = callSpotifyGet(L"https://api.spotify.com/v1/me/player/currently-playing");
+    const auto response = callSpotifyGet(L"https://api.spotify.com/v1/me/player");
     if (!response || response->status == 204 || response->status < 200 || response->status >= 300)
         return std::nullopt;
 
@@ -611,6 +611,15 @@ std::optional<SpotifyPlaybackInfo> SpotifyApiClient::getCurrentPlayback()
 
     SpotifyPlaybackInfo info;
     info.trackUri = *uri;
+    if (const auto deviceRange = jsonTopLevelValueRange(response->body, "device"))
+    {
+        if (const auto id = jsonStringValueInRange(response->body, "id", deviceRange->first, deviceRange->second))
+            info.deviceId = *id;
+        if (const auto name = jsonStringValueInRange(response->body, "name", deviceRange->first, deviceRange->second))
+            info.deviceName = *name;
+        if (const auto type = jsonStringValueInRange(response->body, "type", deviceRange->first, deviceRange->second))
+            info.deviceType = *type;
+    }
     if (const auto progress = jsonIntValueLocal(response->body, "progress_ms"))
         info.progressMs = *progress;
     if (const auto playing = jsonBoolValueLocal(response->body, "is_playing"))

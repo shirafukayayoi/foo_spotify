@@ -9,6 +9,7 @@ namespace
 {
 std::mutex g_suppressMutex;
 std::chrono::steady_clock::time_point g_suppressUntil{};
+std::chrono::steady_clock::time_point g_controlSuppressUntil{};
 std::mutex g_managedRemovalMutex;
 bool g_suppressNextManagedRemoval = false;
 std::mutex g_workerMutex;
@@ -185,6 +186,18 @@ bool markFollowedPlaybackUri(const std::string &uri)
     return true;
 }
 
+bool isExternalPlaybackDevice(const SpotifyPlaybackInfo &playback)
+{
+    pfc::string8 configuredDeviceId = g_cfg_default_device_id.get();
+    if (!configuredDeviceId.is_empty() && !playback.deviceId.empty() && playback.deviceId != configuredDeviceId.c_str())
+        return true;
+
+    if (!playback.deviceType.empty() && _stricmp(playback.deviceType.c_str(), "Computer") != 0)
+        return true;
+
+    return false;
+}
+
 void resetFollowPrime()
 {
     std::lock_guard<std::mutex> lock(g_followStateMutex);
@@ -202,6 +215,18 @@ void suppressVirtualSpotifyPlaybackFor(std::chrono::milliseconds duration)
 {
     std::lock_guard<std::mutex> lock(g_suppressMutex);
     g_suppressUntil = std::chrono::steady_clock::now() + duration;
+}
+
+bool shouldSuppressSpotifyControls()
+{
+    std::lock_guard<std::mutex> lock(g_suppressMutex);
+    return std::chrono::steady_clock::now() < g_controlSuppressUntil;
+}
+
+void suppressSpotifyControlsFor(std::chrono::milliseconds duration)
+{
+    std::lock_guard<std::mutex> lock(g_suppressMutex);
+    g_controlSuppressUntil = std::chrono::steady_clock::now() + duration;
 }
 
 void suppressFollowedSpotifyTrack(const std::string &spotifyTrackUri, std::chrono::milliseconds duration)
@@ -278,6 +303,9 @@ void startSpotifyFollowWorker()
 
                 if (playback && playback->isPlaying && !playback->trackUri.empty())
                 {
+                    if (isExternalPlaybackDevice(*playback))
+                        suppressSpotifyControlsFor(std::chrono::seconds(10));
+
                     if (markFollowedPlaybackUri(playback->trackUri))
                         startFollowedSpotifyTrackInFoobar(playback->trackUri, static_cast<double>(playback->progressMs) / 1000.0);
                 }

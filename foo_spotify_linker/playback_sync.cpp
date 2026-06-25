@@ -131,7 +131,8 @@ public:
         }
         if (reason == play_control::stop_reason_starting_another)
             return;
-        m_client.pause();
+        if (!shouldSuppressSpotifyControls())
+            m_client.pause();
         m_lastSpotifyUri.clear();
         m_lastPlayedPlaylist = SIZE_MAX;
         m_lastPlayedItem = SIZE_MAX;
@@ -142,7 +143,7 @@ public:
 
     void on_playback_pause(bool state) override
     {
-        if (state)
+        if (state && !shouldSuppressSpotifyControls())
             m_client.pause();
     }
 
@@ -173,7 +174,7 @@ public:
 
     void on_playback_seek(double time) override
     {
-        if (!m_lastSpotifyUri.empty())
+        if (!m_lastSpotifyUri.empty() && !shouldSuppressSpotifyControls())
             m_client.seek(time);
     }
 
@@ -194,7 +195,7 @@ public:
 
     void on_volume_change(float newValue) override
     {
-        if (isSpotifyVirtualTrack(m_lastSpotifyUri))
+        if (isSpotifyVirtualTrack(m_lastSpotifyUri) && !shouldSuppressSpotifyControls())
             m_client.setVolume(foobarVolumeDbToPercent(newValue));
     }
 

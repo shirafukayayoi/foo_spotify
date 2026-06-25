@@ -21,6 +21,9 @@ struct SpotifyTrackInfo
 struct SpotifyPlaybackInfo
 {
     std::string trackUri;
+    std::string deviceId;
+    std::string deviceName;
+    std::string deviceType;
     int progressMs = 0;
     bool isPlaying = false;
 };
