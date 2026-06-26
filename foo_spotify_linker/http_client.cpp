@@ -103,6 +103,15 @@ std::optional<HttpResponse> httpRequest(const wchar_t *method,
     WinHttpQueryHeaders(request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
                         WINHTTP_HEADER_NAME_BY_INDEX, &status, &statusSize, WINHTTP_NO_HEADER_INDEX);
 
+    int retryAfterSeconds = -1;
+    wchar_t retryAfter[64]{};
+    DWORD retryAfterSize = sizeof(retryAfter);
+    if (WinHttpQueryHeaders(request, WINHTTP_QUERY_CUSTOM,
+                            L"Retry-After", retryAfter, &retryAfterSize, WINHTTP_NO_HEADER_INDEX))
+    {
+        retryAfterSeconds = _wtoi(retryAfter);
+    }
+
     std::string responseBody;
     for (;;)
     {
@@ -120,7 +129,7 @@ std::optional<HttpResponse> httpRequest(const wchar_t *method,
     WinHttpCloseHandle(request);
     WinHttpCloseHandle(connect);
     WinHttpCloseHandle(session);
-    return HttpResponse{static_cast<int>(status), responseBody};
+    return HttpResponse{static_cast<int>(status), responseBody, retryAfterSeconds};
 }
 
 std::optional<std::string> httpFinalUrl(const std::string &url)

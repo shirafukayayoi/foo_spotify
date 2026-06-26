@@ -80,21 +80,39 @@ std::optional<HttpResponse> callSpotifyGet(const std::wstring &url)
         FB2K_console_formatter() << "foo_spotify_linker: Spotify token error: " << message.c_str();
         return std::nullopt;
     }
-    const auto response = httpRequest(L"GET", url, bearerHeaders(token, false), "");
     const auto urlText = narrowAsciiUrl(url);
-    if (!response)
+    for (int attempt = 0; attempt < 3; ++attempt)
     {
-        logSpotifyApiIssue("GET:no-response:" + urlText,
-                           "Spotify GET failed: no response url=" + urlText);
-        return std::nullopt;
+        const auto response = httpRequest(L"GET", url, bearerHeaders(token, false), "");
+        if (!response)
+        {
+            logSpotifyApiIssue("GET:no-response:" + urlText,
+                               "Spotify GET failed: no response url=" + urlText);
+            return std::nullopt;
+        }
+        if (response->status == 429 && attempt < 2)
+        {
+            int waitSeconds = response->retryAfterSeconds >= 0 ? response->retryAfterSeconds : 2;
+            if (waitSeconds <= 0)
+                waitSeconds = 1;
+            if (waitSeconds <= 15)
+            {
+                FB2K_console_formatter() << "foo_spotify_linker: Spotify rate limited. retry_after_seconds="
+                                         << waitSeconds << " url=" << urlText.c_str();
+                std::this_thread::sleep_for(std::chrono::seconds(waitSeconds));
+                continue;
+            }
+        }
+        if (response->status != 204 && (response->status < 200 || response->status >= 300))
+        {
+            logSpotifyApiIssue("GET:" + std::to_string(response->status) + ":" + urlText,
+                               "Spotify GET failed: HTTP " + std::to_string(response->status) +
+                                   " url=" + urlText + " body=" + truncateForConsole(response->body) +
+                                   (response->retryAfterSeconds >= 0 ? " retry_after_seconds=" + std::to_string(response->retryAfterSeconds) : ""));
+        }
+        return response;
     }
-    if (response->status != 204 && (response->status < 200 || response->status >= 300))
-    {
-        logSpotifyApiIssue("GET:" + std::to_string(response->status) + ":" + urlText,
-                           "Spotify GET failed: HTTP " + std::to_string(response->status) +
-                               " url=" + urlText + " body=" + truncateForConsole(response->body));
-    }
-    return response;
+    return std::nullopt;
 }
 
 std::wstring playbackUrl(const std::wstring &pathAndQuery)
@@ -675,25 +693,28 @@ std::vector<std::string> SpotifyApiClient::getAlbumTrackUris(const std::string &
     if (!id)
         return {};
 
+    constexpr int limit = 50;
     std::vector<std::string> out;
-    for (int offset = 0; offset < 1000; offset += 50)
+    for (int offset = 0; offset < 1000; offset += limit)
     {
         const std::wstring url = L"https://api.spotify.com/v1/albums/" + std::wstring(id->begin(), id->end()) +
-                                 L"/tracks?limit=50&offset=" + std::to_wstring(offset);
+                                 L"/tracks?limit=" + std::to_wstring(limit) + L"&offset=" + std::to_wstring(offset);
         const auto response = callSpotifyGet(url);
         if (!response || response->status < 200 || response->status >= 300)
             break;
 
         const auto uris = spotifyUris(response->body, "spotify:track:");
+        if (uris.empty())
+            break;
         for (const auto &uri : uris)
         {
             if (std::find(out.begin(), out.end(), uri) == out.end())
                 out.push_back(uri);
         }
 
-        const auto nextUrl = jsonStringValue(response->body, "next");
-        if (!nextUrl || nextUrl->empty() || *nextUrl == "null")
+        if (uris.size() < static_cast<size_t>(limit))
             break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
     return out;
 }

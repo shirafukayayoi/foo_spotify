@@ -207,6 +207,7 @@ AlbumAutoRegisterStats autoRegisterSelectedAlbums(metadb_handle_list_cref select
             ++stats.failedAlbums;
             FB2K_console_formatter() << "foo_spotify_linker: Spotify album を検索できませんでした: "
                                      << seed.artist.c_str() << " - " << seed.album.c_str();
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
             continue;
         }
 
@@ -216,10 +217,12 @@ AlbumAutoRegisterStats autoRegisterSelectedAlbums(metadb_handle_list_cref select
             ++stats.failedAlbums;
             FB2K_console_formatter() << "foo_spotify_linker: Spotify album から登録できる track URI を取得できませんでした: "
                                      << seed.artist.c_str() << " - " << seed.album.c_str();
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
             continue;
         }
         ++stats.succeededAlbums;
         stats.registeredTracks += registered;
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
     return stats;
 }

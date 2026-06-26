@@ -6,6 +6,7 @@ struct HttpResponse
 {
     int status = 0;
     std::string body;
+    int retryAfterSeconds = -1;
 };
 
 std::string urlEncode(const std::string &value);
