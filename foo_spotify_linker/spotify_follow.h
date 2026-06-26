@@ -9,7 +9,7 @@ void suppressSpotifyControlsFor(std::chrono::milliseconds duration);
 void suppressFollowedSpotifyTrack(const std::string &spotifyTrackUri, std::chrono::milliseconds duration);
 void suppressNextManagedPlaylistRemoval();
 bool consumeSuppressNextManagedPlaylistRemoval();
-void startFollowedSpotifyTrackInFoobar(const std::string &spotifyTrackUri, double positionSeconds);
+void startFollowedSpotifyTrackInFoobar(const std::string &spotifyTrackUri, double positionSeconds, bool externalDevicePlayback);
 void requestNextSpotifyQueueTrackInFoobar();
 void startSpotifyFollowWorker();
 void stopSpotifyFollowWorker();

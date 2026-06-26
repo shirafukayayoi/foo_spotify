@@ -176,8 +176,8 @@ void suppressSpotifyControlSyncForFollow(std::chrono::milliseconds duration)
 class StartSpotifyTrackCallback : public main_thread_callback
 {
 public:
-    StartSpotifyTrackCallback(std::string uri, double positionSeconds)
-        : m_uri(std::move(uri)), m_positionSeconds(positionSeconds)
+    StartSpotifyTrackCallback(std::string uri, double positionSeconds, bool externalDevicePlayback)
+        : m_uri(std::move(uri)), m_positionSeconds(positionSeconds), m_externalDevicePlayback(externalDevicePlayback)
     {
     }
 
@@ -219,6 +219,11 @@ public:
         {
             SpotifyApiClient().setVolume(0);
             suppressSpotifyControlSyncForFollow(std::chrono::seconds(10));
+            if (m_externalDevicePlayback)
+            {
+                static_api_ptr_t<play_control>()->set_volume(play_control::volume_mute);
+                FB2K_console_formatter() << "foo_spotify_linker: 外部Spotifyデバイス由来のローカル再生のため fb2k 音量を 0 にしました。";
+            }
         }
         else
         {
@@ -232,6 +237,7 @@ public:
 private:
     std::string m_uri;
     double m_positionSeconds = 0.0;
+    bool m_externalDevicePlayback = false;
 };
 
 class AddSpotifyQueueItemsCallback : public main_thread_callback
@@ -381,9 +387,9 @@ bool consumeSuppressNextManagedPlaylistRemoval()
     return suppressed;
 }
 
-void startFollowedSpotifyTrackInFoobar(const std::string &spotifyTrackUri, double positionSeconds)
+void startFollowedSpotifyTrackInFoobar(const std::string &spotifyTrackUri, double positionSeconds, bool externalDevicePlayback)
 {
-    main_thread_callback_manager::get()->add_callback(new service_impl_t<StartSpotifyTrackCallback>(spotifyTrackUri, positionSeconds));
+    main_thread_callback_manager::get()->add_callback(new service_impl_t<StartSpotifyTrackCallback>(spotifyTrackUri, positionSeconds, externalDevicePlayback));
 }
 
 void addSpotifyQueueTracksInFoobar(const std::vector<std::string> &spotifyTrackUris)
@@ -430,11 +436,12 @@ void startSpotifyFollowWorker()
 
                 if (playback && playback->isPlaying && !playback->trackUri.empty())
                 {
-                    if (isExternalPlaybackDevice(*playback))
+                    const bool externalDevicePlayback = isExternalPlaybackDevice(*playback);
+                    if (externalDevicePlayback)
                         suppressSpotifyControlsFor(std::chrono::seconds(10));
 
                     if (markFollowedPlaybackUri(playback->trackUri))
-                        startFollowedSpotifyTrackInFoobar(playback->trackUri, static_cast<double>(playback->progressMs) / 1000.0);
+                        startFollowedSpotifyTrackInFoobar(playback->trackUri, static_cast<double>(playback->progressMs) / 1000.0, externalDevicePlayback);
                 }
 
             }
