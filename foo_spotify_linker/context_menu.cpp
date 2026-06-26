@@ -167,6 +167,7 @@ size_t registerAlbumTrackMappingsFromTrackUri(const TrackMetadata &seed, metadb_
 struct AlbumAutoRegisterStats
 {
     size_t albums = 0;
+    size_t succeededAlbums = 0;
     size_t registeredTracks = 0;
     size_t failedAlbums = 0;
 };
@@ -217,6 +218,7 @@ AlbumAutoRegisterStats autoRegisterSelectedAlbums(metadb_handle_list_cref select
                                      << seed.artist.c_str() << " - " << seed.album.c_str();
             continue;
         }
+        ++stats.succeededAlbums;
         stats.registeredTracks += registered;
     }
     return stats;
@@ -436,9 +438,13 @@ public:
                 popup_message::g_show("Spotify album から登録できる track URI を取得できませんでした。", "Spotify Linker");
                 return;
             }
-            popup_message::g_show(("選択内の " + std::to_string(stats.albums) + " album を処理し、" +
-                                   std::to_string(stats.registeredTracks) + " 曲へ Track URI を登録しました。\n失敗 album: " +
-                                   std::to_string(stats.failedAlbums))
+            popup_message::g_show(("Auto Set Track URI from Album が完了しました。\n"
+                                   "処理アルバム: " +
+                                   std::to_string(stats.albums) + "\n成功アルバム: " +
+                                   std::to_string(stats.succeededAlbums) + "\n失敗アルバム: " +
+                                   std::to_string(stats.failedAlbums) + "\n登録曲数: " +
+                                   std::to_string(stats.registeredTracks) +
+                                   (stats.failedAlbums > 0 ? "\n\n失敗したアルバムは Console に出力しました。" : ""))
                                       .c_str(),
                                   "Spotify Linker");
             return;
