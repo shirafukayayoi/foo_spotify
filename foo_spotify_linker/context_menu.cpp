@@ -164,6 +164,64 @@ size_t registerAlbumTrackMappingsFromTrackUri(const TrackMetadata &seed, metadb_
     return registerAlbumTrackMappings(seed, selected, info->albumUri);
 }
 
+struct AlbumAutoRegisterStats
+{
+    size_t albums = 0;
+    size_t registeredTracks = 0;
+    size_t failedAlbums = 0;
+};
+
+std::vector<TrackMetadata> selectedAlbumSeeds(metadb_handle_list_cref selected)
+{
+    std::vector<TrackMetadata> seeds;
+    std::set<std::string> seenAlbums;
+    for (t_size index = 0; index < selected.get_count(); ++index)
+    {
+        const auto metadata = readTrackMetadata(selected.get_item(index));
+        if (metadata.album.empty() || !isLocalFilesystemPath(metadata.path))
+            continue;
+        const std::string albumId = makeAlbumId(metadata);
+        if (seenAlbums.insert(albumId).second)
+            seeds.push_back(metadata);
+    }
+    return seeds;
+}
+
+AlbumAutoRegisterStats autoRegisterSelectedAlbums(metadb_handle_list_cref selected)
+{
+    AlbumAutoRegisterStats stats;
+    SpotifyApiClient client;
+    for (const auto &seed : selectedAlbumSeeds(selected))
+    {
+        ++stats.albums;
+        std::optional<std::string> albumUri;
+        for (const auto &query : makeAlbumSearchQueries(seed))
+        {
+            albumUri = client.searchAlbum(query);
+            if (albumUri)
+                break;
+        }
+        if (!albumUri)
+        {
+            ++stats.failedAlbums;
+            FB2K_console_formatter() << "foo_spotify_linker: Spotify album を検索できませんでした: "
+                                     << seed.artist.c_str() << " - " << seed.album.c_str();
+            continue;
+        }
+
+        const size_t registered = registerAlbumTrackMappings(seed, selected, *albumUri);
+        if (registered == 0)
+        {
+            ++stats.failedAlbums;
+            FB2K_console_formatter() << "foo_spotify_linker: Spotify album から登録できる track URI を取得できませんでした: "
+                                     << seed.artist.c_str() << " - " << seed.album.c_str();
+            continue;
+        }
+        stats.registeredTracks += registered;
+    }
+    return stats;
+}
+
 class UriDialog : public CDialogImpl<UriDialog>
 {
 public:
@@ -372,26 +430,17 @@ public:
         }
         if (index == cmd_auto_album_uri)
         {
-            SpotifyApiClient client;
-            std::optional<std::string> albumUri;
-            for (const auto &query : makeAlbumSearchQueries(metadata))
-            {
-                albumUri = client.searchAlbum(query);
-                if (albumUri)
-                    break;
-            }
-            if (!albumUri)
-            {
-                popup_message::g_show("Spotify album を検索できませんでした。", "Spotify Linker");
-                return;
-            }
-            const size_t registered = registerAlbumTrackMappings(metadata, data, *albumUri);
-            if (registered == 0)
+            const auto stats = autoRegisterSelectedAlbums(data);
+            if (stats.registeredTracks == 0)
             {
                 popup_message::g_show("Spotify album から登録できる track URI を取得できませんでした。", "Spotify Linker");
                 return;
             }
-            popup_message::g_show(("Album 内の " + std::to_string(registered) + " 曲へ Track URI を登録しました。").c_str(), "Spotify Linker");
+            popup_message::g_show(("選択内の " + std::to_string(stats.albums) + " album を処理し、" +
+                                   std::to_string(stats.registeredTracks) + " 曲へ Track URI を登録しました。\n失敗 album: " +
+                                   std::to_string(stats.failedAlbums))
+                                      .c_str(),
+                                  "Spotify Linker");
             return;
         }
 
