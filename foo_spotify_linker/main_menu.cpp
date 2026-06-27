@@ -3,6 +3,7 @@
 #include "mapping_manager.h"
 #include "metadata.h"
 #include "resource.h"
+#include "settings.h"
 #include "spotify_api_client.h"
 
 namespace fsl
@@ -13,6 +14,7 @@ static constexpr GUID guid_mainmenu_group_spotify = {0xf7c54c3f, 0x8bc2, 0x4ca2,
 static constexpr GUID guid_mainmenu_add_link = {0xc2f2cf2a, 0x33fb, 0x43b5, {0x94, 0xcb, 0x25, 0xcd, 0x64, 0x8a, 0x0e, 0x55}};
 static constexpr GUID guid_mainmenu_autolink_library = {0x32af6437, 0x3bfd, 0x46d6, {0x95, 0xda, 0xc4, 0xf8, 0x8d, 0xcd, 0x31, 0x66}};
 static constexpr GUID guid_mainmenu_add_current_playback = {0x4ad9bbcb, 0xa89d, 0x4a6d, {0x9d, 0xda, 0x8f, 0x8b, 0xc6, 0x1a, 0x54, 0xd8}};
+static constexpr GUID guid_mainmenu_toggle_follow_spotify = {0x7e585d5f, 0x5515, 0x4cb7, {0x93, 0x35, 0xb7, 0x1b, 0x54, 0x75, 0x93, 0x52}};
 
 enum class SpotifyLinkKind
 {
@@ -449,6 +451,7 @@ public:
     {
         cmd_add_link,
         cmd_add_current_playback,
+        cmd_toggle_follow_spotify,
         cmd_autolink_library,
         cmd_count
     };
@@ -466,6 +469,8 @@ public:
             return guid_mainmenu_add_link;
         case cmd_add_current_playback:
             return guid_mainmenu_add_current_playback;
+        case cmd_toggle_follow_spotify:
+            return guid_mainmenu_toggle_follow_spotify;
         case cmd_autolink_library:
             return guid_mainmenu_autolink_library;
         default:
@@ -482,6 +487,9 @@ public:
             return;
         case cmd_add_current_playback:
             out = "Add Current Spotify Playback";
+            return;
+        case cmd_toggle_follow_spotify:
+            out = "Follow Spotify playback in foobar2000";
             return;
         case cmd_autolink_library:
             out = "Auto Link Library Tracks";
@@ -502,6 +510,15 @@ public:
         return true;
     }
 
+    bool get_display(t_uint32 index, pfc::string_base &out, t_uint32 &flags) override
+    {
+        get_name(index, out);
+        flags = 0;
+        if (index == cmd_toggle_follow_spotify && g_cfg_follow_spotify_playback.get())
+            flags |= flag_checked;
+        return true;
+    }
+
     GUID get_parent() override
     {
         return guid_mainmenu_group_spotify;
@@ -517,6 +534,14 @@ public:
         if (index == cmd_add_current_playback)
         {
             addCurrentSpotifyPlaybackToPlaylist();
+            return;
+        }
+        if (index == cmd_toggle_follow_spotify)
+        {
+            const bool enabled = !g_cfg_follow_spotify_playback.get();
+            g_cfg_follow_spotify_playback = enabled;
+            FB2K_console_formatter() << "foo_spotify_linker: Follow Spotify playback in foobar2000 "
+                                     << (enabled ? "enabled" : "disabled");
             return;
         }
 
