@@ -72,6 +72,7 @@ bool queueReplayCurrentPlaylistItem()
     fb2k::inMainThread([playlist, item] {
         auto playlists = static_api_ptr_t<playlist_manager>();
         suppressVirtualSpotifyPlaybackFor(std::chrono::seconds(5));
+        suppressSpotifyControlsFor(std::chrono::seconds(10));
         playlists->playlist_execute_default_action(playlist, item);
     });
     return true;

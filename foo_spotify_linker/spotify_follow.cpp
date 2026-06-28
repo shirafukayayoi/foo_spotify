@@ -215,10 +215,12 @@ public:
         playlists->playlist_ensure_visible(playlist, targetIndex);
 
         suppressVirtualSpotifyPlaybackFor(std::chrono::seconds(5));
+        if (m_externalDevicePlayback)
+            suppressSpotifyControlSyncForFollow(std::chrono::seconds(10));
         if (usingLocalFile)
         {
-            SpotifyApiClient().setVolume(0);
-            suppressSpotifyControlSyncForFollow(std::chrono::seconds(10));
+            if (!m_externalDevicePlayback)
+                SpotifyApiClient().setVolume(0);
             if (m_externalDevicePlayback)
             {
                 static_api_ptr_t<play_control>()->set_volume(play_control::volume_mute);
@@ -227,7 +229,8 @@ public:
         }
         else
         {
-            SpotifyApiClient().setVolume(foobarVolumePercent());
+            if (!m_externalDevicePlayback)
+                SpotifyApiClient().setVolume(foobarVolumePercent());
         }
         playlists->playlist_execute_default_action(playlist, targetIndex);
         if (m_positionSeconds > 1.0)
