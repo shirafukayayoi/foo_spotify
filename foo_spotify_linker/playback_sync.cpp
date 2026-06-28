@@ -84,6 +84,7 @@ public:
         m_lastPlayedPath = metadata.path;
         m_lastPlayedLength = metadata.lengthSeconds;
         m_lastPlaybackNearEnd = false;
+        m_lastPlaybackTime = 0.0;
         const bool previousWasSpotifyVirtual = m_lastTrackWasSpotifyVirtual;
         m_lastTrackWasSpotifyVirtual = isSpotifyVirtualTrack(metadata.path);
         findPlayingPlaylistItem(m_lastPlayedPlaylist, m_lastPlayedItem);
@@ -150,6 +151,7 @@ public:
         m_lastPlayedPath.clear();
         m_lastPlayedLength = 0.0;
         m_lastPlaybackNearEnd = false;
+        m_lastPlaybackTime = 0.0;
     }
 
     void on_playback_pause(bool state) override
@@ -160,21 +162,50 @@ public:
 
     void on_playback_time(double time) override
     {
+        const bool loopedToStart = m_lastPlayedLength > 0.0 &&
+                                   m_lastPlaybackNearEnd &&
+                                   m_lastPlaybackTime > 1.0 &&
+                                   time <= 2.0 &&
+                                   time + 3.0 < m_lastPlaybackTime;
         if (m_lastPlayedLength > 0.0 && m_lastPlayedLength - time <= 1.5)
             m_lastPlaybackNearEnd = true;
         if (m_lastSpotifyUri.empty())
+        {
+            m_lastPlaybackTime = time;
             return;
+        }
+
+        if (loopedToStart && !m_lastTrackWasSpotifyVirtual && !shouldSuppressSpotifyControls())
+        {
+            m_lastPlaybackNearEnd = false;
+            m_lastSeekCheck = std::chrono::steady_clock::now();
+            suppressFollowedSpotifyTrack(m_lastSpotifyUri, std::chrono::seconds(15));
+            m_client.setVolume(0);
+            m_client.play(m_lastSpotifyUri, time, true);
+            m_lastPlaybackTime = time;
+            FB2K_console_formatter() << "foo_spotify_linker: ローカル曲のリピートを検出したため Spotify も再再生しました: "
+                                     << m_lastSpotifyUri.c_str();
+            return;
+        }
+
         const int interval = static_cast<int>(g_cfg_polling_interval_ms.get());
         if (interval <= 0)
+        {
+            m_lastPlaybackTime = time;
             return;
+        }
 
         const auto now = std::chrono::steady_clock::now();
         if (now - m_lastSeekCheck < std::chrono::milliseconds(interval))
+        {
+            m_lastPlaybackTime = time;
             return;
+        }
         m_lastSeekCheck = now;
 
         // 実 API 接続後に Spotify 側の現在位置を取得し、500ms 超のズレを補正する。
         (void)time;
+        m_lastPlaybackTime = time;
     }
 
     void on_playback_starting(play_control::t_track_command command, bool paused) override
@@ -234,6 +265,7 @@ private:
     t_size m_lastPlayedItem = SIZE_MAX;
     std::string m_lastPlayedPath;
     double m_lastPlayedLength = 0.0;
+    double m_lastPlaybackTime = 0.0;
     bool m_lastPlaybackNearEnd = false;
     bool m_lastTrackWasSpotifyVirtual = false;
     std::chrono::steady_clock::time_point m_lastSeekCheck{};
