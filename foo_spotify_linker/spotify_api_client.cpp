@@ -602,6 +602,30 @@ SpotifyResult SpotifyApiClient::setVolume(int volumePercent)
     return callPlayerApi(L"PUT", url, "", false);
 }
 
+SpotifyResult SpotifyApiClient::setShuffle(bool enabled)
+{
+    std::wstring url = playbackUrl(std::wstring(L"/shuffle?state=") + (enabled ? L"true" : L"false"));
+    pfc::string8 device = g_cfg_default_device_id.get();
+    if (!device.is_empty())
+        url += L"&device_id=" + std::wstring(device.c_str(), device.c_str() + std::strlen(device.c_str()));
+    return callPlayerApi(L"PUT", url, "", false);
+}
+
+SpotifyResult SpotifyApiClient::setRepeatMode(const std::string &mode)
+{
+    std::wstring state = L"off";
+    if (mode == "track")
+        state = L"track";
+    else if (mode == "context")
+        state = L"context";
+
+    std::wstring url = playbackUrl(L"/repeat?state=" + state);
+    pfc::string8 device = g_cfg_default_device_id.get();
+    if (!device.is_empty())
+        url += L"&device_id=" + std::wstring(device.c_str(), device.c_str() + std::strlen(device.c_str()));
+    return callPlayerApi(L"PUT", url, "", false);
+}
+
 std::optional<std::string> SpotifyApiClient::searchTrack(const std::string &query)
 {
     const auto tracks = searchTracks(query, 1);

@@ -49,6 +49,68 @@ int foobarVolumeDbToPercent(float volumeDb)
     return pfc::clip_t<int>(static_cast<int>(std::lround(linear * 100.0)), 0, 100);
 }
 
+std::string lowerAscii(std::string value)
+{
+    for (char &ch : value)
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    return value;
+}
+
+struct PlaybackOrderMode
+{
+    bool shuffle = false;
+    std::string repeat = "off";
+};
+
+PlaybackOrderMode currentFoobarPlaybackOrderMode()
+{
+    auto playlists = static_api_ptr_t<playlist_manager>();
+    const t_size active = playlists->playback_order_get_active();
+    const char *name = playlists->playback_order_get_name(active);
+    const std::string order = name ? lowerAscii(name) : "";
+
+    PlaybackOrderMode mode;
+    mode.shuffle = order.find("shuffle") != std::string::npos ||
+                   order.find("random") != std::string::npos;
+    if (order.find("repeat") != std::string::npos)
+    {
+        mode.repeat = order.find("track") != std::string::npos ? "track" : "context";
+    }
+    return mode;
+}
+
+void syncSpotifyPlaybackOrder(SpotifyApiClient &client)
+{
+    if (shouldSuppressSpotifyControls())
+        return;
+
+    const auto mode = currentFoobarPlaybackOrderMode();
+    const auto shuffleResult = client.setShuffle(mode.shuffle);
+    if (!shuffleResult.ok)
+        FB2K_console_formatter() << "foo_spotify_linker: Spotify shuffle sync failed: " << shuffleResult.message.c_str();
+
+    const auto repeatResult = client.setRepeatMode(mode.repeat);
+    if (!repeatResult.ok)
+        FB2K_console_formatter() << "foo_spotify_linker: Spotify repeat sync failed: " << repeatResult.message.c_str();
+}
+
+class PlaybackOrderSyncCallback : public playlist_callback_impl_base
+{
+public:
+    PlaybackOrderSyncCallback() : playlist_callback_impl_base(flag_on_playback_order_changed) {}
+
+    void on_playback_order_changed(t_size p_new_index) override
+    {
+        (void)p_new_index;
+        if (!static_api_ptr_t<play_control>()->is_playing())
+            return;
+        SpotifyApiClient client;
+        syncSpotifyPlaybackOrder(client);
+    }
+};
+
+std::unique_ptr<PlaybackOrderSyncCallback> g_playbackOrderSync;
+
 class LinkerLifecycle : public initquit
 {
 public:
@@ -57,12 +119,14 @@ public:
         const std::string path = effectiveDbPath();
         if (MappingManager::instance().open(path))
             FB2K_console_formatter() << "foo_spotify_linker: DB を開きました: " << path.c_str();
+        g_playbackOrderSync = std::make_unique<PlaybackOrderSyncCallback>();
         startSpotifyFollowWorker();
     }
 
     void on_quit() override
     {
         stopSpotifyFollowWorker();
+        g_playbackOrderSync.reset();
         MappingManager::instance().close();
     }
 };
@@ -122,6 +186,7 @@ public:
         suppressFollowedSpotifyTrack(spotifyUri, std::chrono::seconds(15));
         if (!shouldSuppressSpotifyControls())
         {
+            syncSpotifyPlaybackOrder(m_client);
             if (!m_lastTrackWasSpotifyVirtual)
                 m_client.setVolume(0);
             m_client.play(spotifyUri, 0.0, allowMuteOnSync);
@@ -180,6 +245,7 @@ public:
             m_lastPlaybackNearEnd = false;
             m_lastSeekCheck = std::chrono::steady_clock::now();
             suppressFollowedSpotifyTrack(m_lastSpotifyUri, std::chrono::seconds(15));
+            syncSpotifyPlaybackOrder(m_client);
             m_client.setVolume(0);
             m_client.play(m_lastSpotifyUri, time, true);
             m_lastPlaybackTime = time;
