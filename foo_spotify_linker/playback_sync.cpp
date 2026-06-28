@@ -74,7 +74,7 @@ PlaybackOrderMode currentFoobarPlaybackOrderMode()
                    order.find("random") != std::string::npos;
     if (order.find("repeat") != std::string::npos)
     {
-        mode.repeat = order.find("track") != std::string::npos ? "track" : "context";
+        mode.repeat = "track";
     }
     return mode;
 }
