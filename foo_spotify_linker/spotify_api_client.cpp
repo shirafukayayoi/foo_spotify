@@ -538,7 +538,18 @@ SpotifyResult SpotifyApiClient::playVirtualTrack(const std::string &spotifyTrack
     const std::string body = "{\"uris\":[\"" + spotifyTrackUri + "\"],\"position_ms\":" + std::to_string(posMs) + "}";
     const SpotifyResult result = callPlayerApi(L"PUT", url, body, true);
     if (result.ok)
-        setVolume(volumePercent);
+    {
+        for (int attempt = 0; attempt < 3; ++attempt)
+        {
+            if (attempt > 0)
+                std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            const SpotifyResult volumeResult = setVolume(volumePercent);
+            if (volumeResult.ok)
+                break;
+            if (attempt == 2)
+                FB2K_console_formatter() << "foo_spotify_linker: Spotify virtual volume restore failed: " << volumeResult.message.c_str();
+        }
+    }
     else
         FB2K_console_formatter() << "foo_spotify_linker: Spotify virtual play failed: " << result.message.c_str();
     return result;

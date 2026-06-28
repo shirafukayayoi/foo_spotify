@@ -223,6 +223,7 @@ private:
             return;
         if (shouldSuppressVirtualSpotifyPlayback())
         {
+            SpotifyApiClient().setVolume(foobarVolumePercent());
             m_started = true;
             return;
         }
