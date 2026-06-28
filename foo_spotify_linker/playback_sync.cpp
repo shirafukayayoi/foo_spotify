@@ -62,6 +62,14 @@ struct PlaybackOrderMode
     std::string repeat = "off";
 };
 
+std::mutex g_playbackOrderSyncMutex;
+std::optional<PlaybackOrderMode> g_lastSyncedPlaybackOrder;
+
+bool samePlaybackOrderMode(const PlaybackOrderMode &left, const PlaybackOrderMode &right)
+{
+    return left.shuffle == right.shuffle && left.repeat == right.repeat;
+}
+
 PlaybackOrderMode currentFoobarPlaybackOrderMode()
 {
     auto playlists = static_api_ptr_t<playlist_manager>();
@@ -79,19 +87,35 @@ PlaybackOrderMode currentFoobarPlaybackOrderMode()
     return mode;
 }
 
-void syncSpotifyPlaybackOrder(SpotifyApiClient &client)
+void syncSpotifyPlaybackOrder(SpotifyApiClient &client, bool force)
 {
     if (shouldSuppressSpotifyControls())
         return;
 
+    pfc::string8 device = g_cfg_default_device_id.get();
+    if (device.is_empty())
+        return;
+
     const auto mode = currentFoobarPlaybackOrderMode();
-    const auto shuffleResult = client.setShuffle(mode.shuffle);
-    if (!shuffleResult.ok)
-        FB2K_console_formatter() << "foo_spotify_linker: Spotify shuffle sync failed: " << shuffleResult.message.c_str();
+    if (!force)
+    {
+        std::lock_guard<std::mutex> lock(g_playbackOrderSyncMutex);
+        if (g_lastSyncedPlaybackOrder && samePlaybackOrderMode(*g_lastSyncedPlaybackOrder, mode))
+            return;
+    }
 
     const auto repeatResult = client.setRepeatMode(mode.repeat);
     if (!repeatResult.ok)
         FB2K_console_formatter() << "foo_spotify_linker: Spotify repeat sync failed: " << repeatResult.message.c_str();
+
+    const auto shuffleResult = client.setShuffle(mode.shuffle);
+    if (!shuffleResult.ok)
+        FB2K_console_formatter() << "foo_spotify_linker: Spotify shuffle sync failed: " << shuffleResult.message.c_str();
+
+    {
+        std::lock_guard<std::mutex> lock(g_playbackOrderSyncMutex);
+        g_lastSyncedPlaybackOrder = mode;
+    }
 }
 
 class PlaybackOrderSyncCallback : public playlist_callback_impl_base
@@ -105,7 +129,7 @@ public:
         if (!static_api_ptr_t<play_control>()->is_playing())
             return;
         SpotifyApiClient client;
-        syncSpotifyPlaybackOrder(client);
+        syncSpotifyPlaybackOrder(client, false);
     }
 };
 
@@ -186,7 +210,7 @@ public:
         suppressFollowedSpotifyTrack(spotifyUri, std::chrono::seconds(15));
         if (!shouldSuppressSpotifyControls())
         {
-            syncSpotifyPlaybackOrder(m_client);
+            syncSpotifyPlaybackOrder(m_client, true);
             if (!m_lastTrackWasSpotifyVirtual)
                 m_client.setVolume(0);
             m_client.play(spotifyUri, 0.0, allowMuteOnSync);
@@ -245,7 +269,7 @@ public:
             m_lastPlaybackNearEnd = false;
             m_lastSeekCheck = std::chrono::steady_clock::now();
             suppressFollowedSpotifyTrack(m_lastSpotifyUri, std::chrono::seconds(15));
-            syncSpotifyPlaybackOrder(m_client);
+            syncSpotifyPlaybackOrder(m_client, true);
             m_client.setVolume(0);
             m_client.play(m_lastSpotifyUri, time, true);
             m_lastPlaybackTime = time;
